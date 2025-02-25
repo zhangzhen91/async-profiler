@@ -89,7 +89,9 @@ JfrMetadata::JfrMetadata() : Element("root") {
                 << field("startTime", T_LONG, "Start Time", F_TIME_TICKS)
                 << field("sampledThread", T_THREAD, "Thread", F_CPOOL)
                 << field("stackTrace", T_STACK_TRACE, "Stack Trace", F_CPOOL)
-                << field("state", T_THREAD_STATE, "Thread State", F_CPOOL))
+                << field("state", T_THREAD_STATE, "Thread State", F_CPOOL)
+                << field("traceId", T_LONG, "Trace Id")
+                << field("contextId", T_LONG, "Context Id"))
 
             << (type("jdk.ObjectAllocationInNewTLAB", T_ALLOC_IN_NEW_TLAB, "Allocation in new TLAB")
                 << category("Java Application")

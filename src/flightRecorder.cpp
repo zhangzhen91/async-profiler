@@ -1150,6 +1150,8 @@ class Recording {
         buf->putVar32(tid);
         buf->putVar32(call_trace_id);
         buf->putVar32(event->_thread_state);
+        buf->putVar64(event->trace_id);
+        buf->putVar64(event->span_id);
         buf->put8(start, buf->offset() - start);
     }
 
