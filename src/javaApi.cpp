@@ -13,6 +13,7 @@
 #include "os.h"
 #include "profiler.h"
 #include "vmStructs.h"
+#include "context.h"
 
 
 INCBIN(SERVER_CLASS, "src/helper/one/profiler/Server.class")
@@ -119,6 +120,38 @@ Java_one_profiler_AsyncProfiler_filterThread0(JNIEnv* env, jobject unused, jthre
     }
 }
 
+/*
+ * Class:     one_profiler_AsyncProfiler
+ * Method:    getTid0
+ * Signature: ()I
+ */
+extern "C" JNIEXPORT jint
+JNICALL Java_one_profiler_AsyncProfiler_getTid0
+        (JNIEnv *, jclass){
+    return OS::threadId();
+}
+
+/*
+ * Class:     one_profiler_AsyncProfiler
+ * Method:    getContextPageOffset0
+ * Signature: (I)J
+ */
+extern "C" JNIEXPORT jlong JNICALL
+Java_one_profiler_AsyncProfiler_getContextPageOffset0
+        (JNIEnv *, jclass, jint tid){
+    return reinterpret_cast<jlong>(Context::getInstance().getPage(tid));
+}
+
+/*
+ * Class:     one_profiler_AsyncProfiler
+ * Method:    getMaxContextPages0
+ * Signature: ()I
+ */
+extern "C" JNIEXPORT jint JNICALL
+Java_one_profiler_AsyncProfiler_getMaxContextPages0
+        (JNIEnv *, jclass){
+    return Context::getInstance().maxPages();
+}
 
 #define F(name, sig)  {(char*)#name, (char*)sig, (void*)Java_one_profiler_AsyncProfiler_##name}
 

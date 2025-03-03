@@ -272,4 +272,11 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
     private native String execute0(String command) throws IllegalArgumentException, IllegalStateException, IOException;
 
     private native void filterThread0(Thread thread, boolean enable);
+
+    private static native int getTid0();
+
+    private static native long getContextPageOffset0(int var0);
+
+    private static native int getMaxContextPages0();
+
 }

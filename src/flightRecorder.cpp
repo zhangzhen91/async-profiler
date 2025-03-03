@@ -1150,6 +1150,16 @@ class Recording {
         buf->putVar32(tid);
         buf->putVar32(call_trace_id);
         buf->putVar32(event->_thread_state);
+        buf->put8(start, buf->offset() - start);
+    }
+
+    void recordExecutionSampleTrace(Buffer* buf, int tid, u32 call_trace_id, ExecutionEvent* event) {
+        int start = buf->skip(1);
+        buf->put8(T_EXECUTION_SAMPLE);
+        buf->putVar64(TSC::ticks());
+        buf->putVar32(tid);
+        buf->putVar32(call_trace_id);
+        buf->putVar32(event->_thread_state);
         buf->putVar64(event->trace_id);
         buf->putVar64(event->span_id);
         buf->put8(start, buf->offset() - start);
@@ -1423,7 +1433,10 @@ void FlightRecorder::recordEvent(int lock_index, int tid, u32 call_trace_id,
         Buffer* buf = _rec->buffer(lock_index);
         switch (event_type) {
             case PERF_SAMPLE:
+                _rec->recordExecutionSample(buf, tid, call_trace_id, (ExecutionEvent*)event);
             case EXECUTION_SAMPLE:
+                _rec->recordExecutionSample(buf, tid, call_trace_id, (ExecutionEvent*)event);
+                break;
             case INSTRUMENTED_METHOD:
                 _rec->recordExecutionSample(buf, tid, call_trace_id, (ExecutionEvent*)event);
                 break;
