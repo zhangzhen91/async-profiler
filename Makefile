@@ -8,8 +8,8 @@ LIB_PROFILER=lib/libasyncProfiler.$(SOEXT)
 API_JAR=lib/async-profiler.jar
 CONVERTER_JAR=lib/converter.jar
 
-CFLAGS=-O3 -fno-exceptions
-CXXFLAGS=-O3 -fno-exceptions -fno-omit-frame-pointer -fvisibility=hidden
+CFLAGS=-O3 -fno-exceptions -g
+CXXFLAGS=-O3 -fno-exceptions -fno-omit-frame-pointer -fvisibility=hidden -g
 INCLUDES=-I$(JAVA_HOME)/include -Isrc/helper
 LIBS=-ldl -lpthread
 MERGE=true

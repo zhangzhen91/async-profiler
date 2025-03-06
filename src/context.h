@@ -11,6 +11,8 @@
 struct ThreadContext {
     int64_t trace_id;
     int64_t span_id;
+    int64_t noop;
+
 };
 
 struct ContextPage {
@@ -22,10 +24,12 @@ public:
     static Context& getInstance();
     unsigned int maxPages();
     ContextPage* getPage(int tid);
+    ThreadContext* getThreadContext(int tid);
+
 
 private:
     Context();
-    static unsigned int pages(int tid);
+    unsigned int pages(int tid);
 
     std::vector<ContextPage*> _pages;
     unsigned int _maxPages;

@@ -9,6 +9,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Arrays;
 
 /**
  * Java API for in-process profiling. Serves as a wrapper around
@@ -17,7 +21,28 @@ import java.io.InputStream;
  * libasyncProfiler.so.
  */
 public class AsyncProfiler implements AsyncProfilerMXBean {
+
     private static AsyncProfiler instance;
+
+    private static final int CONTEXT_SIZE = 24;
+    private static final int PAGE_SIZE = 1024;
+    private static final int TRACE_OFFSET = 0;
+    private static final int CONTEXT_OFFSET = 8;
+    private static final int WALL_TIME_OFFSET = 16;
+    private static final ThreadLocal<Integer> TID;
+    private static final String USE_FAST_THREAD_CPU_TIME = "useFastThreadCpuTime";
+    private static final String USE_FAST_THREAD_CPU_TIME_ENV = "USE_FAST_THREAD_CPU_TIME";
+    private ByteBuffer[] contextStorage;
+    private long[] contextBaseOffsets;
+
+    static {
+        TID = new ThreadLocal<Integer>() {
+            @Override
+            protected Integer initialValue() {
+                return AsyncProfiler.getTid0();
+            }
+        };
+    }
 
     private AsyncProfiler() {
     }
@@ -51,9 +76,52 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
                 }
             }
         }
-
+        profiler.initializeContextStorage();
         instance = profiler;
         return profiler;
+    }
+
+    private void initializeContextStorage() {
+        if (this.contextStorage == null) {
+            int maxPage = getMaxContextPages0();
+            if (maxPage > 0) {
+                this.contextStorage = new ByteBuffer[maxPage];
+            }
+        }
+
+    }
+
+    public void setContextId(long traceId, long spanId) {
+        int tid = TID.get();
+        this.setContextByteBuffer(tid, traceId, spanId);
+    }
+
+    private void setContextByteBuffer(int tid, long traceId, long spanId) {
+        if (this.contextStorage != null) {
+            ByteBuffer var6 = this.getPage(tid);
+            int var7 = tid % 1024 * 24;
+            var6.putLong(var7 + 0, traceId);
+            var6.putLong(var7 + 8, spanId);
+        }
+    }
+
+    private ByteBuffer getPage(int var1) {
+        int var2 = var1 / 1024;
+        ByteBuffer var3 = this.contextStorage[var2];
+        if (var3 == null) {
+            this.contextStorage[var2] = var3 = getContextPage0(var1).order(ByteOrder.LITTLE_ENDIAN);
+        }
+
+        return var3;
+    }
+
+    private long getPageUnsafe(int tid) {
+        int tidIndex = tid / 1024;
+        long contextAddress = this.contextBaseOffsets[tidIndex];
+        if (contextAddress == -9223372036854775808L) {
+            this.contextBaseOffsets[tidIndex] = contextAddress = getContextPageOffset0(tid);
+        }
+        return contextAddress;
     }
 
     private static File extractEmbeddedLib() {
@@ -275,7 +343,9 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
 
     private static native int getTid0();
 
-    private static native long getContextPageOffset0(int var0);
+    private static native long getContextPageOffset0(int tid);
+
+    private static native ByteBuffer getContextPage0(int tid);
 
     private static native int getMaxContextPages0();
 

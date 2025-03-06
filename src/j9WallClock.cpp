@@ -11,7 +11,7 @@
 
 long J9WallClock::_interval;
 
-Error J9WallClock::start(Arguments& args) {
+Error J9WallClock::start(Arguments &args) {
     _interval = args._interval ? args._interval : DEFAULT_INTERVAL * 5;
     _max_stack_depth = args._jstackdepth;
 
@@ -31,11 +31,11 @@ void J9WallClock::stop() {
 }
 
 void J9WallClock::timerLoop() {
-    JNIEnv* jni = VM::attachThread("Async-profiler Sampler");
-    jvmtiEnv* jvmti = VM::jvmti();
+    JNIEnv *jni = VM::attachThread("Async-profiler Sampler");
+    jvmtiEnv *jvmti = VM::jvmti();
 
     int max_frames = _max_stack_depth + MAX_NATIVE_FRAMES + RESERVED_FRAMES;
-    ASGCT_CallFrame* frames = (ASGCT_CallFrame*)malloc(max_frames * sizeof(ASGCT_CallFrame));
+    ASGCT_CallFrame *frames = (ASGCT_CallFrame *) malloc(max_frames * sizeof(ASGCT_CallFrame));
 
     while (_running) {
         if (!_enabled) {
@@ -45,13 +45,13 @@ void J9WallClock::timerLoop() {
 
         jni->PushLocalFrame(64);
 
-        jvmtiStackInfoExtended* stack_infos;
+        jvmtiStackInfoExtended *stack_infos;
         jint thread_count;
-        if (J9Ext::GetAllStackTracesExtended(_max_stack_depth, (void**)&stack_infos, &thread_count) == 0) {
+        if (J9Ext::GetAllStackTracesExtended(_max_stack_depth, (void **) &stack_infos, &thread_count) == 0) {
             for (int i = 0; i < thread_count; i++) {
-                jvmtiStackInfoExtended* si = &stack_infos[i];
+                jvmtiStackInfoExtended *si = &stack_infos[i];
                 for (int j = 0; j < si->frame_count; j++) {
-                    jvmtiFrameInfoExtended* fi = &si->frame_buffer[j];
+                    jvmtiFrameInfoExtended *fi = &si->frame_buffer[j];
                     frames[j].method_id = fi->method;
                     frames[j].bci = FrameType::encode(fi->type, fi->location);
                 }
@@ -59,11 +59,10 @@ void J9WallClock::timerLoop() {
                 int tid = J9Ext::GetOSThreadID(si->thread);
                 ExecutionEvent event;
                 event._thread_state = (si->state & JVMTI_THREAD_STATE_RUNNABLE) ? THREAD_RUNNING : THREAD_SLEEPING;
-                event.trace_id = 11111111;
-                event.span_id = 2222222;
-                Profiler::instance()->recordExternalSample(_interval, tid, EXECUTION_SAMPLE, &event, si->frame_count, frames);
+                Profiler::instance()->recordExternalSample(_interval, tid, EXECUTION_SAMPLE, &event, si->frame_count,
+                                                           frames);
             }
-            jvmti->Deallocate((unsigned char*)stack_infos);
+            jvmti->Deallocate((unsigned char *) stack_infos);
         }
 
         jni->PopLocalFrame(NULL);

@@ -33,9 +33,7 @@ class Event {
 class ExecutionEvent : public Event {
   public:
     ThreadState _thread_state;
-    u64 trace_id;
-    u64 span_id;
-    ExecutionEvent() : _thread_state(THREAD_UNKNOWN), trace_id(0), span_id(0) {
+    ExecutionEvent() : _thread_state(THREAD_UNKNOWN) {
     }
 };
 
