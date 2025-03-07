@@ -194,7 +194,9 @@ public class JfrReader implements Closeable {
         int tid = getVarint();
         int stackTraceId = getVarint();
         int threadState = getVarint();
-        return new ExecutionSample(time, tid, stackTraceId, threadState);
+        long traceId = getVarlong();
+        long spanId = getVarlong();
+        return new ExecutionSample(time, tid, stackTraceId, threadState, traceId, spanId);
     }
 
     private AllocationSample readAllocationSample(boolean tlab) {

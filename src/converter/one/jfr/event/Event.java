@@ -11,11 +11,21 @@ public abstract class Event implements Comparable<Event> {
     public final long time;
     public final int tid;
     public final int stackTraceId;
+    public long traceId = 0;
+    public long spanId = 0;
 
     protected Event(long time, int tid, int stackTraceId) {
         this.time = time;
         this.tid = tid;
         this.stackTraceId = stackTraceId;
+    }
+
+    protected Event(long time, int tid, int stackTraceId, long traceId, long spanId) {
+        this.time = time;
+        this.tid = tid;
+        this.stackTraceId = stackTraceId;
+        this.traceId = traceId;
+        this.spanId = spanId;
     }
 
     @Override

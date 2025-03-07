@@ -12,4 +12,14 @@ public class ExecutionSample extends Event {
         super(time, tid, stackTraceId);
         this.threadState = threadState;
     }
+
+    public ExecutionSample(long time, int tid, int stackTraceId, int threadState, long traceId, long spanId) {
+        super(time, tid, stackTraceId, traceId, spanId);
+        this.threadState = threadState;
+    }
+
+    @Override
+    public boolean sameGroup(Event o) {
+        return traceId == o.traceId && spanId == o.spanId;
+    }
 }

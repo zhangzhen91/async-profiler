@@ -84,7 +84,7 @@ public class jfr2flame {
                             + (args.classify ? 1 : 0)
                             + (classFrame != null ? 1 : 0)];
                     if (args.threads) {
-                        trace[0] = getThreadFrame(event.tid);
+                        trace[0] = event.traceId + "";
                     }
                     int idx = trace.length;
                     if (classFrame != null) {

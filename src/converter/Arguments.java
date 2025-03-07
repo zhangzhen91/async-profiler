@@ -22,7 +22,7 @@ public class Arguments {
     boolean alloc;
     boolean live;
     boolean lock;
-    boolean threads;
+    boolean threads = true;
     boolean classify;
     boolean total;
     boolean lines;
