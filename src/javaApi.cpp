@@ -173,6 +173,19 @@ Java_one_profiler_AsyncProfiler_getMaxContextPages0
     return Context::getInstance().maxPages();
 }
 
+/*
+ * Class:     one_profiler_AsyncProfiler
+ * Method:    dump0
+ * Signature: (Ljava/lang/String;)V
+ */
+extern "C" JNIEXPORT void JNICALL
+Java_one_profiler_AsyncProfiler_dump0
+        (JNIEnv * env, jclass, jstring fileName) {
+    const char* fileName_str = env->GetStringUTFChars(fileName, NULL);
+    Profiler* profiler = Profiler::instance();
+    profiler->dump(fileName_str);
+}
+
 #define F(name, sig)  {(char*)#name, (char*)sig, (void*)Java_one_profiler_AsyncProfiler_##name}
 
 static const JNINativeMethod profiler_natives[] = {

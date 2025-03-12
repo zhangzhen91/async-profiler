@@ -560,15 +560,37 @@ public:
         return chunk_end;
     }
 
-    void switchChunk() {
+    void switchChunk(int fd) {
         _chunk_start = finishChunk();
         _start_time = _stop_time;
         _start_ticks = _stop_ticks;
-        _base_id += 0x1000000;
+        if (fd > 0) {
+            OS::copyFile(_fd, fd, 0, _chunk_start);
+            OS::truncateFile(_fd);
+            _base_id = 0;
+            _chunk_start = 0;
+        } else {
+            _base_id += 0x1000000;
+        }
         _bytes_written = 0;
-
         writeHeader(_buf);
         writeMetadata(_buf);
+        if (fd > 0) {
+            writeSettings(_buf, _global_args);
+            if (!_global_args.hasOption(NO_SYSTEM_INFO)) {
+                writeOsCpuInfo(_buf);
+                writeJvmInfo(_buf);
+            }
+            if (!_global_args.hasOption(NO_SYSTEM_PROPS)) {
+                writeSystemProperties(_buf);
+            }
+            if (!_global_args.hasOption(NO_NATIVE_LIBS)) {
+                _recorded_lib_count = 0;
+                writeNativeLibraries(_buf);
+            } else {
+                _recorded_lib_count = -1;
+            }
+        }
         writeRecordingInfo(_buf);
         flush(_buf);
     }
@@ -1362,7 +1384,17 @@ void FlightRecorder::stop() {
 void FlightRecorder::flush() {
     if (_rec != NULL) {
         _rec_lock.lock();
-        _rec->switchChunk();
+        _rec->switchChunk(-1);
+        _rec_lock.unlock();
+    }
+}
+
+void FlightRecorder::dump(const char* filename) {
+    if (_rec != NULL) {
+        _rec_lock.lock();
+        int fd = open(filename, O_CREAT | O_RDWR | 0, 0644);
+        _rec->switchChunk(fd);
+        close(fd);
         _rec_lock.unlock();
     }
 }

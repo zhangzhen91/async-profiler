@@ -1333,6 +1333,22 @@ Error Profiler::dump(std::ostream& out, Arguments& args) {
     return Error::OK;
 }
 
+Error Profiler::dump(const char* filename) {
+    MutexLocker ml(_state_lock);
+    if (_state != IDLE && _state != RUNNING) {
+        return Error("Profiler has not started");
+    }
+
+    if (_state == RUNNING) {
+        updateJavaThreadNames();
+        updateNativeThreadNames();
+        lockAll();
+        _jfr.dump(filename);
+        unlockAll();
+    }
+    return Error::OK;
+}
+
 void Profiler::printUsedMemory(std::ostream& out) {
     size_t call_trace_storage = _call_trace_storage.usedMemory();
     size_t dictionaries = _class_map.usedMemory() + _symbol_map.usedMemory() + _thread_filter.usedMemory() + _jfr.usedMemory();

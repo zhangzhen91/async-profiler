@@ -9,10 +9,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.Arrays;
 
 /**
  * Java API for in-process profiling. Serves as a wrapper around
@@ -319,6 +317,10 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
         filterThread(thread, false);
     }
 
+    public void dump(String fileName) {
+        dump0(fileName);
+    }
+
     private void filterThread(Thread thread, boolean enable) {
         if (thread == null || thread == Thread.currentThread()) {
             filterThread0(null, enable);
@@ -348,5 +350,8 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
     private static native ByteBuffer getContextPage0(int tid);
 
     private static native int getMaxContextPages0();
+
+    private static native void dump0(String fileName);
+
 
 }

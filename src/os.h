@@ -83,6 +83,8 @@ class OS {
     static u64 getTotalCpuTime(u64* utime, u64* stime);
 
     static void copyFile(int src_fd, int dst_fd, off_t offset, size_t size);
+    static int truncateFile(int fd);
+
     static void freePageCache(int fd, off_t start_offset);
 };
 
