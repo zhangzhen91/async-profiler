@@ -8,8 +8,8 @@ LIB_PROFILER=lib/libasyncProfiler.$(SOEXT)
 API_JAR=lib/async-profiler.jar
 CONVERTER_JAR=lib/converter.jar
 
-CFLAGS=-O3 -fno-exceptions -g
-CXXFLAGS=-O3 -fno-exceptions -fno-omit-frame-pointer -fvisibility=hidden -g
+CFLAGS=-O3 -fno-exceptions
+CXXFLAGS=-O3 -fno-exceptions -fno-omit-frame-pointer -fvisibility=hidden
 INCLUDES=-I$(JAVA_HOME)/include -Isrc/helper
 LIBS=-ldl -lpthread
 MERGE=true
@@ -156,7 +156,7 @@ native:
 	mkdir -p native/linux-x64 native/linux-arm64 native/macos
 	tar xfO async-profiler-$(PROFILER_VERSION)-linux-x64.tar.gz */lib/libasyncProfiler.so > native/linux-x64/libasyncProfiler.so
 	tar xfO async-profiler-$(PROFILER_VERSION)-linux-arm64.tar.gz */lib/libasyncProfiler.so > native/linux-arm64/libasyncProfiler.so
-	unzip -p async-profiler-$(PROFILER_VERSION)-macos.zip */lib/libasyncProfiler.so > native/macos/libasyncProfiler.so
+	unzip -p async-profiler-$(PROFILER_VERSION)-macos.zip */lib/libasyncProfiler.dylib > native/macos/libasyncProfiler.dylib
 
 clean:
 	$(RM) -r build
