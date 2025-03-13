@@ -101,7 +101,7 @@ $(PACKAGE_NAME).tar.gz: $(PACKAGE_DIR)
 	rm -r $(PACKAGE_DIR)
 
 $(PACKAGE_NAME).zip: $(PACKAGE_DIR)
-	codesign -s "Developer ID" -o runtime --timestamp -v $(PACKAGE_DIR)/$(LAUNCHER) $(PACKAGE_DIR)/$(LIB_PROFILER)
+	# codesign -s "Developer ID" -o runtime --timestamp -v $(PACKAGE_DIR)/$(LAUNCHER) $(PACKAGE_DIR)/$(LIB_PROFILER)
 	ditto -c -k --keepParent $(PACKAGE_DIR) $@
 	rm -r $(PACKAGE_DIR)
 
