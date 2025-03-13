@@ -1,9 +1,5 @@
 FROM centos:8
 
-# 替换为 CentOS Vault 镜像源
-RUN sed -i 's|mirrorlist=|#mirrorlist=|g' /etc/yum.repos.d/CentOS-* && \
-    sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
-
 # 安装 GCC 8.x
 #RUN dnf install -y gcc-toolset-8
 RUN yum install -y make

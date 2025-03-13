@@ -156,7 +156,7 @@ native:
 	mkdir -p native/linux-x64 native/linux-arm64 native/macos
 	tar xfO async-profiler-$(PROFILER_VERSION)-linux-x64.tar.gz */lib/libasyncProfiler.so > native/linux-x64/libasyncProfiler.so
 	tar xfO async-profiler-$(PROFILER_VERSION)-linux-arm64.tar.gz */lib/libasyncProfiler.so > native/linux-arm64/libasyncProfiler.so
-	unzip -p async-profiler-$(PROFILER_VERSION)-macos.zip */lib/libasyncProfiler.dylib > native/macos/libasyncProfiler.dylib
+	unzip -p async-profiler-$(PROFILER_VERSION)-macos-x64.zip */lib/libasyncProfiler.dylib > native/macos/libasyncProfiler.dylib
 
 clean:
 	$(RM) -r build
