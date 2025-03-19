@@ -1207,7 +1207,7 @@ public:
         buf->putVar32(call_trace_id);
         buf->putVar32(event->_thread_state);
         ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
-        if (threadContext != nullptr) {
+        if (threadContext != NULL) {
             buf->putVar64(threadContext->trace_id);
             buf->putVar64(threadContext->span_id);
         } else {
