@@ -13,7 +13,7 @@ Context &Context::getInstance() {
 
 Context::Context() {
     _maxPages = pages(OS::getMaxThreadId());
-    _pages.resize(_maxPages, NULL);
+    _pages.resize(_maxPages, nullptr);
 }
 
 unsigned int Context::pages(int tid) {
@@ -33,7 +33,7 @@ ThreadContext *Context::getThreadContext(int tid) {
 ContextPage *Context::getPage(int tid) {
     unsigned int pageIndex = pages(tid);
     ContextPage *contextPage = this->_pages[pageIndex];
-    if (contextPage == NULL) {
+    if (contextPage == nullptr) {
         contextPage = new ContextPage();
         this->_pages[pageIndex] = contextPage;
     }

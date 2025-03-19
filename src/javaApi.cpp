@@ -149,14 +149,14 @@ Java_one_profiler_AsyncProfiler_getContextPage0
     // 调用 Contexts::getPage 获取页的起始地址
     ContextPage* pageAddress = Context::getInstance().getPage(tid);
     if (!pageAddress) {
-        return NULL; // 如果获取失败，返回 null
+        return nullptr; // 如果获取失败，返回 null
     }
     // 创建一个直接字节缓冲区
     jobject byteBuffer = env->NewDirectByteBuffer(pageAddress, sizeof(pageAddress->slots));
     if (!byteBuffer) {
         // 如果创建失败，释放内存（如果需要）
         // 注意：NewDirectByteBuffer 不会分配内存，因此不需要释放 pageAddress
-        return NULL;
+        return nullptr;
     }
 
     return byteBuffer;

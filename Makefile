@@ -45,7 +45,7 @@ ifeq ($(OS),Darwin)
     MERGE=false
   endif
 else
-  CXXFLAGS += -Wl,-z,defs
+  CXXFLAGS += -Wl,-z,defs -static-libstdc++ -static-libgcc
   ifeq ($(MERGE),true)
     CXXFLAGS += -fwhole-program
   endif
