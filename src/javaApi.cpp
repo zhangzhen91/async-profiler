@@ -125,7 +125,7 @@ Java_one_profiler_AsyncProfiler_filterThread0(JNIEnv* env, jobject unused, jthre
  * Method:    getTid0
  * Signature: ()I
  */
-extern "C" JNIEXPORT jint
+extern "C" DLLEXPORT jint
 JNICALL Java_one_profiler_AsyncProfiler_getTid0
         (JNIEnv *, jclass){
     return OS::threadId();
@@ -136,13 +136,13 @@ JNICALL Java_one_profiler_AsyncProfiler_getTid0
  * Method:    getContextPageOffset0
  * Signature: (I)J
  */
-extern "C" JNIEXPORT jlong JNICALL
+extern "C" DLLEXPORT jlong JNICALL
 Java_one_profiler_AsyncProfiler_getContextPageOffset0
         (JNIEnv *, jclass, jint tid){
     return reinterpret_cast<jlong>(Context::getInstance().getPage(tid));
 }
 
-extern "C" JNIEXPORT jobject JNICALL
+extern "C" DLLEXPORT jobject JNICALL
 Java_one_profiler_AsyncProfiler_getContextPage0
   (JNIEnv* env, jclass, jint tid){
 
@@ -167,7 +167,7 @@ Java_one_profiler_AsyncProfiler_getContextPage0
  * Method:    getMaxContextPages0
  * Signature: ()I
  */
-extern "C" JNIEXPORT jint JNICALL
+extern "C" DLLEXPORT jint JNICALL
 Java_one_profiler_AsyncProfiler_getMaxContextPages0
         (JNIEnv *, jclass){
     return Context::getInstance().maxPages();
@@ -178,7 +178,7 @@ Java_one_profiler_AsyncProfiler_getMaxContextPages0
  * Method:    dump0
  * Signature: (Ljava/lang/String;)V
  */
-extern "C" JNIEXPORT void JNICALL
+extern "C" DLLEXPORT void JNICALL
 Java_one_profiler_AsyncProfiler_dump0
         (JNIEnv * env, jclass, jstring fileName) {
     const char* fileName_str = env->GetStringUTFChars(fileName, NULL);
