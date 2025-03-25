@@ -98,8 +98,20 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
         if (this.contextStorage != null) {
             ByteBuffer var6 = this.getPage(tid);
             int var7 = tid % 1024 * 24;
+            check(var6, var7, traceId, spanId);
             var6.putLong(var7 + 0, traceId);
             var6.putLong(var7 + 8, spanId);
+        }
+    }
+
+    private void check(ByteBuffer var6, int index, long traceId, long spanId) {
+        if (traceId == 0 && spanId == 0) {
+            return;
+        }
+        long originTraceId = (var6.getLong(index + 0));
+        long originSpanId = (var6.getLong(index + 8));
+        if (originTraceId > 0 && originSpanId > 0) {
+            System.out.println("出现问题数据=============traceId=" + traceId + "spanId = " + spanId);
         }
     }
 
