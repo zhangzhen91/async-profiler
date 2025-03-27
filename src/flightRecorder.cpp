@@ -30,12 +30,8 @@
 
 INCBIN(JFR_SYNC_CLASS, "src/helper/one/profiler/JfrSync.class")
 
-static void JNICALL
-JfrSync_stopProfiler(JNIEnv
-* env,
-jclass cls
-) {
-Profiler::instance()->stop();
+static void JNICALL JfrSync_stopProfiler(JNIEnv* env, jclass cls) {
+    Profiler::instance()->stop();
 }
 
 
@@ -60,9 +56,9 @@ static jmethodID _start_method;
 static jmethodID _stop_method;
 static jmethodID _box_method;
 
-static const char *const SETTING_RING[] = {NULL, "kernel", "user"};
-static const char *const SETTING_CSTACK[] = {NULL, "no", "fp", "dwarf", "lbr", "vm"};
-static const char *const SETTING_CLOCK[] = {NULL, "tsc", "monotonic"};
+static const char* const SETTING_RING[] = {NULL, "kernel", "user"};
+static const char* const SETTING_CSTACK[] = {NULL, "no", "fp", "dwarf", "lbr", "vm"};
+static const char* const SETTING_CLOCK[] = {NULL, "tsc", "monotonic"};
 
 
 struct CpuTime {
@@ -78,7 +74,7 @@ struct CpuTimes {
 
 
 class MethodInfo {
-public:
+  public:
     MethodInfo() : _mark(false), _key(0) {
     }
 
@@ -89,7 +85,7 @@ public:
     u32 _sig;
     jint _modifiers;
     jint _line_number_table_size;
-    jvmtiLineNumberEntry *_line_number_table;
+    jvmtiLineNumberEntry* _line_number_table;
     FrameTypeId _type;
 
     jint getLineNumber(jint bci) {
@@ -106,16 +102,16 @@ public:
 };
 
 class MethodMap : public std::map<jmethodID, MethodInfo> {
-public:
+  public:
     MethodMap() {
     }
 
     ~MethodMap() {
-        jvmtiEnv *jvmti = VM::jvmti();
+        jvmtiEnv* jvmti = VM::jvmti();
         for (const_iterator it = begin(); it != end(); ++it) {
-            jvmtiLineNumberEntry *line_number_table = it->second._line_number_table;
+            jvmtiLineNumberEntry* line_number_table = it->second._line_number_table;
             if (line_number_table != NULL) {
-                jvmti->Deallocate((unsigned char *) line_number_table);
+                jvmti->Deallocate((unsigned char*)line_number_table);
             }
         }
     }
@@ -131,14 +127,14 @@ public:
 };
 
 class Lookup {
-public:
-    MethodMap *_method_map;
-    Dictionary *_classes;
+  public:
+    MethodMap* _method_map;
+    Dictionary* _classes;
     Dictionary _packages;
     Dictionary _symbols;
 
-private:
-    void fillNativeMethodInfo(MethodInfo *mi, const char *name, const char *lib_name) {
+  private:
+    void fillNativeMethodInfo(MethodInfo* mi, const char* name, const char* lib_name) {
         if (lib_name == NULL) {
             mi->_class = _classes->lookup("");
         } else if (lib_name[0] == '[' && lib_name[1] != 0) {
@@ -152,7 +148,7 @@ private:
         mi->_line_number_table = NULL;
 
         if (name[0] == '_' && name[1] == 'Z') {
-            char *demangled = Demangle::demangle(name, false);
+            char* demangled = Demangle::demangle(name, false);
             if (demangled != NULL) {
                 mi->_name = _symbols.lookup(demangled);
                 mi->_sig = _symbols.lookup("()L;");
@@ -174,21 +170,21 @@ private:
         }
     }
 
-    bool fillJavaMethodInfo(MethodInfo *mi, jmethodID method, bool first_time) {
+    bool fillJavaMethodInfo(MethodInfo* mi, jmethodID method, bool first_time) {
         if (VMStructs::hasMethodStructs()) {
             // Workaround for JDK-8313816
-            VMMethod *vm_method = VMMethod::fromMethodID(method);
+            VMMethod* vm_method = VMMethod::fromMethodID(method);
             if (vm_method == NULL || vm_method->id() == NULL) {
                 return false;
             }
         }
 
-        jvmtiEnv *jvmti = VM::jvmti();
+        jvmtiEnv* jvmti = VM::jvmti();
 
         jclass method_class;
-        char *class_name = NULL;
-        char *method_name = NULL;
-        char *method_sig = NULL;
+        char* class_name = NULL;
+        char* method_name = NULL;
+        char* method_sig = NULL;
 
         if (jvmti->GetMethodDeclaringClass(method, &method_class) == 0 &&
             jvmti->GetClassSignature(method_class, &class_name, NULL) == 0 &&
@@ -202,16 +198,15 @@ private:
             mi->_sig = _symbols.lookup("()L;");
         }
 
-        jvmti->Deallocate((unsigned char *) method_sig);
-        jvmti->Deallocate((unsigned char *) method_name);
-        jvmti->Deallocate((unsigned char *) class_name);
+        jvmti->Deallocate((unsigned char*)method_sig);
+        jvmti->Deallocate((unsigned char*)method_name);
+        jvmti->Deallocate((unsigned char*)class_name);
 
         if (first_time && jvmti->GetMethodModifiers(method, &mi->_modifiers) != 0) {
             mi->_modifiers = 0;
         }
 
-        if (first_time &&
-            jvmti->GetLineNumberTable(method, &mi->_line_number_table_size, &mi->_line_number_table) != 0) {
+        if (first_time && jvmti->GetLineNumberTable(method, &mi->_line_number_table_size, &mi->_line_number_table) != 0) {
             mi->_line_number_table_size = 0;
             mi->_line_number_table = NULL;
         }
@@ -220,7 +215,7 @@ private:
         return true;
     }
 
-    void fillJavaClassInfo(MethodInfo *mi, u32 class_id) {
+    void fillJavaClassInfo(MethodInfo* mi, u32 class_id) {
         mi->_class = class_id;
         mi->_name = _symbols.lookup("");
         mi->_sig = _symbols.lookup("()L;");
@@ -230,14 +225,14 @@ private:
         mi->_type = FRAME_INLINED;
     }
 
-public:
-    Lookup(MethodMap *method_map, Dictionary *classes) :
-            _method_map(method_map), _classes(classes), _packages(), _symbols() {
+  public:
+    Lookup(MethodMap* method_map, Dictionary* classes) :
+        _method_map(method_map), _classes(classes), _packages(), _symbols() {
     }
 
-    MethodInfo *resolveMethod(ASGCT_CallFrame &frame) {
+    MethodInfo* resolveMethod(ASGCT_CallFrame& frame) {
         jmethodID method = frame.method_id;
-        MethodInfo *mi = &(*_method_map)[method];
+        MethodInfo* mi = &(*_method_map)[method];
 
         bool first_time = mi->_key == 0;
         if (first_time) {
@@ -253,20 +248,20 @@ public:
                     fillNativeMethodInfo(mi, "stale_jmethodID", NULL);
                 }
             } else if (frame.bci == BCI_NATIVE_FRAME) {
-                const char *name = (const char *) method;
+                const char* name = (const char*)method;
                 fillNativeMethodInfo(mi, name, Profiler::instance()->getLibraryName(name));
             } else if (frame.bci == BCI_ERROR) {
-                fillNativeMethodInfo(mi, (const char *) method, NULL);
+                fillNativeMethodInfo(mi, (const char*)method, NULL);
             } else {
-                fillJavaClassInfo(mi, (uintptr_t) method);
+                fillJavaClassInfo(mi, (uintptr_t)method);
             }
         }
 
         return mi;
     }
 
-    u32 getPackage(const char *class_name) {
-        const char *package = strrchr(class_name, '/');
+    u32 getPackage(const char* class_name) {
+        const char* package = strrchr(class_name, '/');
         if (package == NULL) {
             return 0;
         }
@@ -282,23 +277,23 @@ public:
         return _packages.lookup(class_name, package - class_name);
     }
 
-    u32 getSymbol(const char *name) {
+    u32 getSymbol(const char* name) {
         return _symbols.lookup(name);
     }
 };
 
 
 class Buffer {
-private:
+  private:
     int _offset;
     char _data[0];
 
-protected:
+  protected:
     Buffer() : _offset(0) {
     }
 
-public:
-    const char *data() const {
+  public:
+    const char* data() const {
         return _data;
     }
 
@@ -316,9 +311,9 @@ public:
         _offset = 0;
     }
 
-    void put(const char *v, u32 len) {
+    void put(const char* v, u32 len) {
         memcpy(_data + _offset, v, len);
-        _offset += (int) len;
+        _offset += (int)len;
     }
 
     void put8(char v) {
@@ -326,17 +321,17 @@ public:
     }
 
     void put16(short v) {
-        *(short *) (_data + _offset) = htons(v);
+        *(short*)(_data + _offset) = htons(v);
         _offset += 2;
     }
 
     void put32(int v) {
-        *(int *) (_data + _offset) = htonl(v);
+        *(int*)(_data + _offset) = htonl(v);
         _offset += 4;
     }
 
     void put64(u64 v) {
-        *(u64 *) (_data + _offset) = OS::hton64(v);
+        *(u64*)(_data + _offset) = OS::hton64(v);
         _offset += 8;
     }
 
@@ -352,31 +347,28 @@ public:
 
     void putVar32(u32 v) {
         while (v > 0x7f) {
-            _data[_offset++] = (char) v | 0x80;
+            _data[_offset++] = (char)v | 0x80;
             v >>= 7;
         }
-        _data[_offset++] = (char) v;
+        _data[_offset++] = (char)v;
     }
 
     void putVar64(u64 v) {
         int iter = 0;
         while (v > 0x1fffff) {
-            _data[_offset++] = (char) v | 0x80;
-            v >>= 7;
-            _data[_offset++] = (char) v | 0x80;
-            v >>= 7;
-            _data[_offset++] = (char) v | 0x80;
-            v >>= 7;
+            _data[_offset++] = (char)v | 0x80; v >>= 7;
+            _data[_offset++] = (char)v | 0x80; v >>= 7;
+            _data[_offset++] = (char)v | 0x80; v >>= 7;
             if (++iter == 3) return;
         }
         while (v > 0x7f) {
-            _data[_offset++] = (char) v | 0x80;
+            _data[_offset++] = (char)v | 0x80;
             v >>= 7;
         }
-        _data[_offset++] = (char) v;
+        _data[_offset++] = (char)v;
     }
 
-    void putUtf8(const char *v) {
+    void putUtf8(const char* v) {
         if (v == NULL) {
             put8(0);
         } else {
@@ -385,7 +377,7 @@ public:
         }
     }
 
-    void putUtf8(const char *v, u32 len) {
+    void putUtf8(const char* v, u32 len) {
         put8(3);
         putVar32(len);
         put(v, len);
@@ -405,34 +397,34 @@ public:
 };
 
 class SmallBuffer : public Buffer {
-private:
+  private:
     char _buf[SMALL_BUFFER_SIZE - sizeof(Buffer)];
 
-public:
+  public:
     SmallBuffer() : Buffer() {
     }
 };
 
 class RecordingBuffer : public Buffer {
-private:
+  private:
     char _buf[RECORDING_BUFFER_SIZE - sizeof(Buffer)];
 
-public:
+  public:
     RecordingBuffer() : Buffer() {
     }
 };
 
 
 class Recording {
-private:
-    static char *_agent_properties;
-    static char *_jvm_args;
-    static char *_jvm_flags;
-    static char *_java_command;
+  private:
+    static char* _agent_properties;
+    static char* _jvm_args;
+    static char* _jvm_flags;
+    static char* _java_command;
 
     RecordingBuffer _buf[CONCURRENCY_LEVEL];
     int _fd;
-    char *_master_recording_file;
+    char* _master_recording_file;
     off_t _chunk_start;
     ThreadFilter _thread_set;
     MethodMap _method_map;
@@ -460,8 +452,8 @@ private:
         return value < 0 ? 0 : value > 1 ? 1 : value;
     }
 
-public:
-    Recording(int fd, const char *master_recording_file, Arguments &args) : _fd(fd), _thread_set(), _method_map() {
+  public:
+    Recording(int fd, const char* master_recording_file, Arguments& args) : _fd(fd), _thread_set(), _method_map() {
         _master_recording_file = master_recording_file == NULL ? NULL : strdup(master_recording_file);
         _chunk_start = lseek(_fd, 0, SEEK_END);
         _start_time = OS::micros();
@@ -535,12 +527,12 @@ public:
         // Patch cpool size field
         _buf->putVar32(0, chunk_end - cpool_offset);
         ssize_t result = pwrite(_fd, _buf->data(), 5, cpool_offset);
-        (void) result;
+        (void)result;
 
         // Workaround for JDK-8191415: compute actual TSC frequency, in case JFR is wrong
         u64 tsc_frequency = TSC::frequency();
         if (TSC::enabled()) {
-            tsc_frequency = (u64) (double(_stop_ticks - _start_ticks) / double(_stop_time - _start_time) * 1000000);
+            tsc_frequency = (u64)(double(_stop_ticks - _start_ticks) / double(_stop_time - _start_time) * 1000000);
         }
 
         // Patch chunk header
@@ -552,7 +544,7 @@ public:
         _buf->put64(_start_ticks);
         _buf->put64(tsc_frequency);
         result = pwrite(_fd, _buf->data(), 56, _chunk_start + 8);
-        (void) result;
+        (void)result;
 
         OS::freePageCache(_fd, _chunk_start);
 
@@ -612,13 +604,13 @@ public:
 
         float proc_user = 0, proc_system = 0, machine_total = 0;
 
-        if (times.proc.real != (u64) -1 && times.proc.real > _last_times.proc.real) {
+        if (times.proc.real != (u64)-1 && times.proc.real > _last_times.proc.real) {
             float delta = (times.proc.real - _last_times.proc.real) * _available_processors;
             proc_user = ratio((times.proc.user - _last_times.proc.user) / delta);
             proc_system = ratio((times.proc.system - _last_times.proc.system) / delta);
         }
 
-        if (times.total.real != (u64) -1 && times.total.real > _last_times.total.real) {
+        if (times.total.real != (u64)-1 && times.total.real > _last_times.total.real) {
             float delta = times.total.real - _last_times.total.real;
             machine_total = ratio(((times.total.user + times.total.system) -
                                    (_last_times.total.user + _last_times.total.system)) / delta);
@@ -646,7 +638,7 @@ public:
         return _master_recording_file != NULL;
     }
 
-    void appendRecording(const char *target_file, size_t size) {
+    void appendRecording(const char* target_file, size_t size) {
         int append_fd = open(target_file, O_WRONLY);
         if (append_fd >= 0) {
             lseek(append_fd, 0, SEEK_END);
@@ -657,28 +649,26 @@ public:
         }
     }
 
-    Buffer *buffer(int lock_index) {
+    Buffer* buffer(int lock_index) {
         return &_buf[lock_index];
     }
 
     bool parseAgentProperties() {
-        JNIEnv * env = VM::jni();
+        JNIEnv* env = VM::jni();
         jclass vm_support = env->FindClass("jdk/internal/vm/VMSupport");
         if (vm_support == NULL) {
             env->ExceptionClear();
             vm_support = env->FindClass("sun/misc/VMSupport");
         }
         if (vm_support != NULL) {
-            jmethodID get_agent_props = env->GetStaticMethodID(vm_support, "getAgentProperties",
-                                                               "()Ljava/util/Properties;");
-            jmethodID to_string = env->GetMethodID(env->FindClass("java/lang/Object"), "toString",
-                                                   "()Ljava/lang/String;");
+            jmethodID get_agent_props = env->GetStaticMethodID(vm_support, "getAgentProperties", "()Ljava/util/Properties;");
+            jmethodID to_string = env->GetMethodID(env->FindClass("java/lang/Object"), "toString", "()Ljava/lang/String;");
             if (get_agent_props != NULL && to_string != NULL) {
                 jobject props = env->CallStaticObjectMethod(vm_support, get_agent_props);
                 if (props != NULL) {
-                    jstring str = (jstring) env->CallObjectMethod(props, to_string);
+                    jstring str = (jstring)env->CallObjectMethod(props, to_string);
                     if (str != NULL) {
-                        _agent_properties = (char *) env->GetStringUTFChars(str, NULL);
+                        _agent_properties = (char*)env->GetStringUTFChars(str, NULL);
                     }
                 }
             }
@@ -689,7 +679,7 @@ public:
             return false;
         }
 
-        char *p = _agent_properties + 1;
+        char* p = _agent_properties + 1;
         p[strlen(p) - 1] = 0;
 
         while (*p) {
@@ -712,21 +702,21 @@ public:
         return true;
     }
 
-    const char *getFeaturesString(char *str, size_t size, StackWalkFeatures f) {
+    const char* getFeaturesString(char* str, size_t size, StackWalkFeatures f) {
         snprintf(str, size, "%s %s %s %s %s %s %s %s %s",
-                 f.unknown_java ? "unknown_java" : "-",
-                 f.unwind_stub ? "unwind_stub" : "-",
-                 f.unwind_comp ? "unwind_comp" : "-",
+                 f.unknown_java  ? "unknown_java"  : "-",
+                 f.unwind_stub   ? "unwind_stub"   : "-",
+                 f.unwind_comp   ? "unwind_comp"   : "-",
                  f.unwind_native ? "unwind_native" : "-",
-                 f.java_anchor ? "java_anchor" : "-",
-                 f.gc_traces ? "gc_traces" : "-",
-                 f.probe_sp ? "probesp" : "-",
-                 f.vtable_target ? "vtable" : "-",
-                 f.comp_task ? "comptask" : "-");
+                 f.java_anchor   ? "java_anchor"   : "-",
+                 f.gc_traces     ? "gc_traces"     : "-",
+                 f.probe_sp      ? "probesp"       : "-",
+                 f.vtable_target ? "vtable"        : "-",
+                 f.comp_task     ? "comptask"      : "-");
         return str;
     }
 
-    void flush(Buffer *buf) {
+    void flush(Buffer* buf) {
         ssize_t result = write(_fd, buf->data(), buf->offset());
         if (result > 0) {
             atomicInc(_bytes_written, result);
@@ -734,13 +724,13 @@ public:
         buf->reset();
     }
 
-    void flushIfNeeded(Buffer *buf, int limit = RECORDING_BUFFER_LIMIT) {
+    void flushIfNeeded(Buffer* buf, int limit = RECORDING_BUFFER_LIMIT) {
         if (buf->offset() >= limit) {
             flush(buf);
         }
     }
 
-    void writeHeader(Buffer *buf) {
+    void writeHeader(Buffer* buf) {
         buf->put("FLR\0", 4);            // magic
         buf->put16(2);                   // major
         buf->put16(0);                   // minor
@@ -754,14 +744,14 @@ public:
         buf->put32(1);                   // features
     }
 
-    void writeMetadata(Buffer *buf) {
+    void writeMetadata(Buffer* buf) {
         int metadata_start = buf->skip(5);  // size will be patched later
         buf->putVar32(T_METADATA);
         buf->putVar64(_start_ticks);
         buf->putVar32(0);
         buf->putVar32(0x7fffffff);  // must not clash with JFR metadata ID, or 'jfr print' will break
 
-        std::vector <std::string> &strings = JfrMetadata::strings();
+        std::vector<std::string>& strings = JfrMetadata::strings();
         buf->putVar32(strings.size());
         for (int i = 0; i < strings.size(); i++) {
             buf->putUtf8(strings[i].c_str());
@@ -772,7 +762,7 @@ public:
         buf->putVar32(metadata_start, buf->offset() - metadata_start);
     }
 
-    void writeElement(Buffer *buf, const Element *e) {
+    void writeElement(Buffer* buf, const Element* e) {
         buf->putVar32(e->_name);
 
         buf->putVar32(e->_attributes.size());
@@ -787,13 +777,12 @@ public:
         }
     }
 
-    void writeRecordingInfo(Buffer *buf) {
+    void writeRecordingInfo(Buffer* buf) {
         int start = buf->skip(1);
         buf->put8(T_ACTIVE_RECORDING);
         buf->putVar64(_start_ticks);
         buf->putVar32(1);
-        buf->putUtf8("async-profiler "
-        PROFILER_VERSION);
+        buf->putUtf8("async-profiler " PROFILER_VERSION);
         buf->putUtf8("async-profiler.jfr");
         buf->putVar64(MAX_JLONG);
         buf->putVar32(0);
@@ -802,7 +791,7 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void writeSettings(Buffer *buf, Arguments &args) {
+    void writeSettings(Buffer* buf, Arguments& args) {
         writeStringSetting(buf, T_ACTIVE_RECORDING, "version", PROFILER_VERSION);
         writeStringSetting(buf, T_ACTIVE_RECORDING, "ring", SETTING_RING[args._ring]);
         writeStringSetting(buf, T_ACTIVE_RECORDING, "cstack", SETTING_CSTACK[args._cstack]);
@@ -841,12 +830,11 @@ public:
             writeIntSetting(buf, T_MONITOR_ENTER, "lock", args._lock);
         }
 
-        writeBoolSetting(buf, T_ACTIVE_RECORDING, "debugSymbols",
-                         VM::loaded() && VMStructs::libjvm()->hasDebugSymbols());
+        writeBoolSetting(buf, T_ACTIVE_RECORDING, "debugSymbols", VM::loaded() && VMStructs::libjvm()->hasDebugSymbols());
         writeBoolSetting(buf, T_ACTIVE_RECORDING, "kernelSymbols", Symbols::haveKernelSymbols());
     }
 
-    void writeStringSetting(Buffer *buf, int category, const char *key, const char *value) {
+    void writeStringSetting(Buffer* buf, int category, const char* key, const char* value) {
         flushIfNeeded(buf, RECORDING_BUFFER_LIMIT - MAX_STRING_LENGTH);
         int start = buf->skip(5);
         buf->put8(T_ACTIVE_SETTING);
@@ -857,24 +845,24 @@ public:
         buf->putVar32(start, buf->offset() - start);
     }
 
-    void writeBoolSetting(Buffer *buf, int category, const char *key, bool value) {
+    void writeBoolSetting(Buffer* buf, int category, const char* key, bool value) {
         writeStringSetting(buf, category, key, value ? "true" : "false");
     }
 
-    void writeIntSetting(Buffer *buf, int category, const char *key, long long value) {
+    void writeIntSetting(Buffer* buf, int category, const char* key, long long value) {
         char str[32];
         snprintf(str, sizeof(str), "%lld", value);
         writeStringSetting(buf, category, key, str);
     }
 
-    void writeListSetting(Buffer *buf, int category, const char *key, const char *base, int offset) {
+    void writeListSetting(Buffer* buf, int category, const char* key, const char* base, int offset) {
         while (offset != 0) {
             writeStringSetting(buf, category, key, base + offset);
-            offset = ((int *) (base + offset))[-1];
+            offset = ((int*)(base + offset))[-1];
         }
     }
 
-    void writeOsCpuInfo(Buffer *buf) {
+    void writeOsCpuInfo(Buffer* buf) {
         struct utsname u;
         if (uname(&u) != 0) {
             return;
@@ -901,15 +889,15 @@ public:
         buf->putVar32(start, buf->offset() - start);
     }
 
-    void writeJvmInfo(Buffer *buf) {
+    void writeJvmInfo(Buffer* buf) {
         if (_agent_properties == NULL && !(VM::loaded() && parseAgentProperties())) {
             return;
         }
 
-        char *jvm_name = NULL;
-        char *jvm_version = NULL;
+        char* jvm_name = NULL;
+        char* jvm_version = NULL;
 
-        jvmtiEnv *jvmti = VM::jvmti();
+        jvmtiEnv* jvmti = VM::jvmti();
         jvmti->GetSystemProperty("java.vm.name", &jvm_name);
         jvmti->GetSystemProperty("java.vm.version", &jvm_version);
 
@@ -926,21 +914,21 @@ public:
         buf->putVar32(OS::processId());
         buf->putVar32(start, buf->offset() - start);
 
-        jvmti->Deallocate((unsigned char *) jvm_version);
-        jvmti->Deallocate((unsigned char *) jvm_name);
+        jvmti->Deallocate((unsigned char*)jvm_version);
+        jvmti->Deallocate((unsigned char*)jvm_name);
     }
 
-    void writeSystemProperties(Buffer *buf) {
-        jvmtiEnv *jvmti = VM::jvmti();
+    void writeSystemProperties(Buffer* buf) {
+        jvmtiEnv* jvmti = VM::jvmti();
         jint count;
-        char **keys;
+        char** keys;
         if (!VM::loaded() || jvmti->GetSystemProperties(&count, &keys) != 0) {
             return;
         }
 
         for (int i = 0; i < count; i++) {
-            char *key = keys[i];
-            char *value = NULL;
+            char* key = keys[i];
+            char* value = NULL;
             if (jvmti->GetSystemProperty(key, &value) == 0) {
                 flushIfNeeded(buf, RECORDING_BUFFER_LIMIT - 2 * MAX_STRING_LENGTH);
                 int start = buf->skip(5);
@@ -949,18 +937,18 @@ public:
                 buf->putUtf8(key);
                 buf->putUtf8(value);
                 buf->putVar32(start, buf->offset() - start);
-                jvmti->Deallocate((unsigned char *) value);
+                jvmti->Deallocate((unsigned char*)value);
             }
         }
 
-        jvmti->Deallocate((unsigned char *) keys);
+        jvmti->Deallocate((unsigned char*)keys);
     }
 
-    void writeNativeLibraries(Buffer *buf) {
+    void writeNativeLibraries(Buffer* buf) {
         if (_recorded_lib_count < 0) return;
 
-        Profiler *profiler = Profiler::instance();
-        CodeCacheArray &native_libs = profiler->_native_libs;
+        Profiler* profiler = Profiler::instance();
+        CodeCacheArray& native_libs = profiler->_native_libs;
         int native_lib_count = native_libs.count();
 
         for (int i = _recorded_lib_count; i < native_lib_count; i++) {
@@ -977,7 +965,7 @@ public:
         _recorded_lib_count = native_lib_count;
     }
 
-    void writeCpool(Buffer *buf) {
+    void writeCpool(Buffer* buf) {
         buf->skip(5);  // size will be patched later
         buf->putVar32(T_CPOOL);
         buf->putVar64(_start_ticks);
@@ -1000,60 +988,48 @@ public:
         writeLogLevels(buf);
     }
 
-    void writeFrameTypes(Buffer *buf) {
+    void writeFrameTypes(Buffer* buf) {
         buf->putVar32(T_FRAME_TYPE);
         buf->putVar32(7);
-        buf->putVar32(FRAME_INTERPRETED);
-        buf->putUtf8("Interpreted");
-        buf->putVar32(FRAME_JIT_COMPILED);
-        buf->putUtf8("JIT compiled");
-        buf->putVar32(FRAME_INLINED);
-        buf->putUtf8("Inlined");
-        buf->putVar32(FRAME_NATIVE);
-        buf->putUtf8("Native");
-        buf->putVar32(FRAME_CPP);
-        buf->putUtf8("C++");
-        buf->putVar32(FRAME_KERNEL);
-        buf->putUtf8("Kernel");
-        buf->putVar32(FRAME_C1_COMPILED);
-        buf->putUtf8("C1 compiled");
+        buf->putVar32(FRAME_INTERPRETED);  buf->putUtf8("Interpreted");
+        buf->putVar32(FRAME_JIT_COMPILED); buf->putUtf8("JIT compiled");
+        buf->putVar32(FRAME_INLINED);      buf->putUtf8("Inlined");
+        buf->putVar32(FRAME_NATIVE);       buf->putUtf8("Native");
+        buf->putVar32(FRAME_CPP);          buf->putUtf8("C++");
+        buf->putVar32(FRAME_KERNEL);       buf->putUtf8("Kernel");
+        buf->putVar32(FRAME_C1_COMPILED);  buf->putUtf8("C1 compiled");
     }
 
-    void writeThreadStates(Buffer *buf) {
+    void writeThreadStates(Buffer* buf) {
         buf->putVar32(T_THREAD_STATE);
         buf->putVar32(3);
-        buf->putVar32(THREAD_UNKNOWN);
-        buf->putUtf8("STATE_DEFAULT");
-        buf->putVar32(THREAD_RUNNING);
-        buf->putUtf8("STATE_RUNNABLE");
-        buf->putVar32(THREAD_SLEEPING);
-        buf->putUtf8("STATE_SLEEPING");
+        buf->putVar32(THREAD_UNKNOWN);     buf->putUtf8("STATE_DEFAULT");
+        buf->putVar32(THREAD_RUNNING);     buf->putUtf8("STATE_RUNNABLE");
+        buf->putVar32(THREAD_SLEEPING);    buf->putUtf8("STATE_SLEEPING");
     }
 
-    void writeGCWhen(Buffer *buf) {
+    void writeGCWhen(Buffer* buf) {
         buf->putVar32(T_GC_WHEN);
         buf->putVar32(2);
-        buf->putVar32(BEFORE_GC);
-        buf->putUtf8("Before GC");
-        buf->putVar32(AFTER_GC);
-        buf->putUtf8("After GC");
+        buf->putVar32(BEFORE_GC);          buf->putUtf8("Before GC");
+        buf->putVar32(AFTER_GC);           buf->putUtf8("After GC");
     }
 
-    void writeThreads(Buffer *buf) {
+    void writeThreads(Buffer* buf) {
         std::vector<int> threads;
         _thread_set.collect(threads);
         _thread_set.clear();
 
-        Profiler *profiler = Profiler::instance();
+        Profiler* profiler = Profiler::instance();
         MutexLocker ml(profiler->_thread_names_lock);
-        std::map<int, std::string> &thread_names = profiler->_thread_names;
-        std::map<int, jlong> &thread_ids = profiler->_thread_ids;
+        std::map<int, std::string>& thread_names = profiler->_thread_names;
+        std::map<int, jlong>& thread_ids = profiler->_thread_ids;
         char name_buf[32];
 
         buf->putVar32(T_THREAD);
         buf->putVar32(threads.size());
         for (int i = 0; i < threads.size(); i++) {
-            const char *thread_name;
+            const char* thread_name;
             jlong thread_id;
             std::map<int, std::string>::const_iterator it = thread_names.find(threads[i]);
             if (it != thread_names.end()) {
@@ -1078,19 +1054,19 @@ public:
         }
     }
 
-    void writeStackTraces(Buffer *buf, Lookup *lookup) {
-        std::map < u32, CallTrace * > traces;
+    void writeStackTraces(Buffer* buf, Lookup* lookup) {
+        std::map<u32, CallTrace*> traces;
         Profiler::instance()->_call_trace_storage.collectTraces(traces);
 
         buf->putVar32(T_STACK_TRACE);
         buf->putVar32(traces.size());
-        for (std::map<u32, CallTrace *>::const_iterator it = traces.begin(); it != traces.end(); ++it) {
-            CallTrace *trace = it->second;
+        for (std::map<u32, CallTrace*>::const_iterator it = traces.begin(); it != traces.end(); ++it) {
+            CallTrace* trace = it->second;
             buf->putVar32(it->first);
             buf->putVar32(0);  // truncated
             buf->putVar32(trace->num_frames);
             for (int i = 0; i < trace->num_frames; i++) {
-                MethodInfo *mi = lookup->resolveMethod(trace->frames[i]);
+                MethodInfo* mi = lookup->resolveMethod(trace->frames[i]);
                 buf->putVar32(mi->_key);
                 if (mi->_type == FRAME_INTERPRETED) {
                     jint bci = trace->frames[i].bci;
@@ -1110,8 +1086,8 @@ public:
         }
     }
 
-    void writeMethods(Buffer *buf, Lookup *lookup) {
-        MethodMap *method_map = lookup->_method_map;
+    void writeMethods(Buffer* buf, Lookup* lookup) {
+        MethodMap* method_map = lookup->_method_map;
 
         u32 marked_count = 0;
         for (MethodMap::const_iterator it = method_map->begin(); it != method_map->end(); ++it) {
@@ -1123,7 +1099,7 @@ public:
         buf->putVar32(T_METHOD);
         buf->putVar32(marked_count);
         for (MethodMap::iterator it = method_map->begin(); it != method_map->end(); ++it) {
-            MethodInfo &mi = it->second;
+            MethodInfo& mi = it->second;
             if (mi._mark) {
                 mi._mark = false;
                 buf->putVar32(mi._key);
@@ -1137,14 +1113,14 @@ public:
         }
     }
 
-    void writeClasses(Buffer *buf, Lookup *lookup) {
-        std::map<u32, const char *> classes;
+    void writeClasses(Buffer* buf, Lookup* lookup) {
+        std::map<u32, const char*> classes;
         lookup->_classes->collect(classes);
 
         buf->putVar32(T_CLASS);
         buf->putVar32(classes.size());
-        for (std::map<u32, const char *>::const_iterator it = classes.begin(); it != classes.end(); ++it) {
-            const char *name = it->second;
+        for (std::map<u32, const char*>::const_iterator it = classes.begin(); it != classes.end(); ++it) {
+            const char* name = it->second;
             buf->putVar32(it->first);
             buf->putVar32(0);  // classLoader
             buf->putVar64(lookup->getSymbol(name) | _base_id);
@@ -1154,33 +1130,33 @@ public:
         }
     }
 
-    void writePackages(Buffer *buf, Lookup *lookup) {
-        std::map<u32, const char *> packages;
+    void writePackages(Buffer* buf, Lookup* lookup) {
+        std::map<u32, const char*> packages;
         lookup->_packages.collect(packages);
 
         buf->putVar32(T_PACKAGE);
         buf->putVar32(packages.size());
-        for (std::map<u32, const char *>::const_iterator it = packages.begin(); it != packages.end(); ++it) {
+        for (std::map<u32, const char*>::const_iterator it = packages.begin(); it != packages.end(); ++it) {
             buf->putVar64(it->first | _base_id);
             buf->putVar64(lookup->getSymbol(it->second) | _base_id);
             flushIfNeeded(buf);
         }
     }
 
-    void writeSymbols(Buffer *buf, Lookup *lookup) {
-        std::map<u32, const char *> symbols;
+    void writeSymbols(Buffer* buf, Lookup* lookup) {
+        std::map<u32, const char*> symbols;
         lookup->_symbols.collect(symbols);
 
         buf->putVar32(T_SYMBOL);
         buf->putVar32(symbols.size());
-        for (std::map<u32, const char *>::const_iterator it = symbols.begin(); it != symbols.end(); ++it) {
+        for (std::map<u32, const char*>::const_iterator it = symbols.begin(); it != symbols.end(); ++it) {
             flushIfNeeded(buf, RECORDING_BUFFER_LIMIT - MAX_STRING_LENGTH);
             buf->putVar64(it->first | _base_id);
             buf->putUtf8(it->second);
         }
     }
 
-    void writeLogLevels(Buffer *buf) {
+    void writeLogLevels(Buffer* buf) {
         buf->putVar32(T_LOG_LEVEL);
         buf->putVar32(LOG_ERROR - LOG_TRACE + 1);
         for (int i = LOG_TRACE; i <= LOG_ERROR; i++) {
@@ -1189,7 +1165,7 @@ public:
         }
     }
 
-    void recordExecutionSample(Buffer *buf, int tid, u32 call_trace_id, ExecutionEvent *event) {
+    void recordExecutionSample(Buffer* buf, int tid, u32 call_trace_id, ExecutionEvent* event) {
         int start = buf->skip(1);
         buf->put8(T_EXECUTION_SAMPLE);
         buf->putVar64(TSC::ticks());
@@ -1217,7 +1193,7 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void recordAllocationInNewTLAB(Buffer *buf, int tid, u32 call_trace_id, AllocEvent *event) {
+    void recordAllocationInNewTLAB(Buffer* buf, int tid, u32 call_trace_id, AllocEvent* event) {
         int start = buf->skip(1);
         buf->put8(T_ALLOC_IN_NEW_TLAB);
         buf->putVar64(TSC::ticks());
@@ -1229,7 +1205,7 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void recordAllocationOutsideTLAB(Buffer *buf, int tid, u32 call_trace_id, AllocEvent *event) {
+    void recordAllocationOutsideTLAB(Buffer* buf, int tid, u32 call_trace_id, AllocEvent* event) {
         int start = buf->skip(1);
         buf->put8(T_ALLOC_OUTSIDE_TLAB);
         buf->putVar64(TSC::ticks());
@@ -1240,7 +1216,7 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void recordLiveObject(Buffer *buf, int tid, u32 call_trace_id, LiveObject *event) {
+    void recordLiveObject(Buffer* buf, int tid, u32 call_trace_id, LiveObject* event) {
         int start = buf->skip(1);
         buf->put8(T_LIVE_OBJECT);
         buf->putVar64(TSC::ticks());
@@ -1252,7 +1228,7 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void recordMonitorBlocked(Buffer *buf, int tid, u32 call_trace_id, LockEvent *event) {
+    void recordMonitorBlocked(Buffer* buf, int tid, u32 call_trace_id, LockEvent* event) {
         int start = buf->skip(1);
         buf->put8(T_MONITOR_ENTER);
         buf->putVar64(event->_start_time);
@@ -1265,7 +1241,7 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void recordThreadPark(Buffer *buf, int tid, u32 call_trace_id, LockEvent *event) {
+    void recordThreadPark(Buffer* buf, int tid, u32 call_trace_id, LockEvent* event) {
         int start = buf->skip(1);
         buf->put8(T_THREAD_PARK);
         buf->putVar64(event->_start_time);
@@ -1279,7 +1255,7 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void recordWindow(Buffer *buf, int tid, ProfilingWindow *event) {
+    void recordWindow(Buffer* buf, int tid, ProfilingWindow* event) {
         int start = buf->skip(1);
         buf->put8(T_WINDOW);
         buf->putVar64(event->_start_time);
@@ -1288,7 +1264,7 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void recordCpuLoad(Buffer *buf, float proc_user, float proc_system, float machine_total) {
+    void recordCpuLoad(Buffer* buf, float proc_user, float proc_system, float machine_total) {
         int start = buf->skip(1);
         buf->put8(T_CPU_LOAD);
         buf->putVar64(TSC::ticks());
@@ -1298,8 +1274,8 @@ public:
         buf->put8(start, buf->offset() - start);
     }
 
-    void recordHeapSummary(Buffer *buf, u32 id, GCWhen when, u64 total_memory, u64 free_memory) {
-        CollectedHeap *heap = CollectedHeap::heap();
+    void recordHeapSummary(Buffer* buf, u32 id, GCWhen when, u64 total_memory, u64 free_memory) {
+        CollectedHeap* heap = CollectedHeap::heap();
         u64 heap_start = heap != NULL ? heap->start() : 0;
         u64 heap_size = heap != NULL ? heap->size() : total_memory;
 
@@ -1324,20 +1300,20 @@ public:
     }
 };
 
-char *Recording::_agent_properties = NULL;
-char *Recording::_jvm_args = NULL;
-char *Recording::_jvm_flags = NULL;
-char *Recording::_java_command = NULL;
+char* Recording::_agent_properties = NULL;
+char* Recording::_jvm_args = NULL;
+char* Recording::_jvm_flags = NULL;
+char* Recording::_java_command = NULL;
 
 
-Error FlightRecorder::start(Arguments &args, bool reset) {
-    const char *filename = args.file();
+Error FlightRecorder::start(Arguments& args, bool reset) {
+    const char* filename = args.file();
     if (filename == NULL || filename[0] == 0) {
         return Error("Flight Recorder output file is not specified");
     }
 
-    char *filename_tmp = NULL;
-    const char *master_recording_file = NULL;
+    char* filename_tmp = NULL;
+    const char* master_recording_file = NULL;
     if (args._jfr_sync != NULL) {
         Error error = startMasterRecording(args, master_recording_file = filename);
         if (error) {
@@ -1345,7 +1321,7 @@ Error FlightRecorder::start(Arguments &args, bool reset) {
         }
 
         size_t len = strlen(filename);
-        filename_tmp = (char *) malloc(len + 16);
+        filename_tmp = (char*)malloc(len + 16);
         snprintf(filename_tmp, len + 16, "%s.%d~", filename, OS::processId());
         filename = filename_tmp;
     }
@@ -1423,8 +1399,8 @@ bool FlightRecorder::timerTick(u64 wall_time, u32 gc_id) {
     return need_switch_chunk;
 }
 
-Error FlightRecorder::startMasterRecording(Arguments &args, const char *filename) {
-    JNIEnv * env = VM::jni();
+Error FlightRecorder::startMasterRecording(Arguments& args, const char* filename) {
+    JNIEnv* env = VM::jni();
 
     if (_jfr_sync_class == NULL) {
         if (env->FindClass("jdk/jfr/FlightRecorderListener") == NULL) {
@@ -1432,15 +1408,14 @@ Error FlightRecorder::startMasterRecording(Arguments &args, const char *filename
             return Error("JDK Flight Recorder is not available");
         }
 
-        const JNINativeMethod native_method = {(char *) "stopProfiler", (char *) "()V", (void *) JfrSync_stopProfiler};
+        const JNINativeMethod native_method = {(char*)"stopProfiler", (char*)"()V", (void*)JfrSync_stopProfiler};
 
-        jclass cls = env->DefineClass(NULL, NULL, (const jbyte *) JFR_SYNC_CLASS, INCBIN_SIZEOF(JFR_SYNC_CLASS));
+        jclass cls = env->DefineClass(NULL, NULL, (const jbyte*)JFR_SYNC_CLASS, INCBIN_SIZEOF(JFR_SYNC_CLASS));
         if (cls == NULL || env->RegisterNatives(cls, &native_method, 1) != 0
-            ||
-            (_start_method = env->GetStaticMethodID(cls, "start", "(Ljava/lang/String;Ljava/lang/String;I)V")) == NULL
-            || (_stop_method = env->GetStaticMethodID(cls, "stop", "()V")) == NULL
-            || (_box_method = env->GetStaticMethodID(cls, "box", "(I)Ljava/lang/Integer;")) == NULL
-            || (_jfr_sync_class = (jclass) env->NewGlobalRef(cls)) == NULL) {
+                || (_start_method = env->GetStaticMethodID(cls, "start", "(Ljava/lang/String;Ljava/lang/String;I)V")) == NULL
+                || (_stop_method = env->GetStaticMethodID(cls, "stop", "()V")) == NULL
+                || (_box_method = env->GetStaticMethodID(cls, "box", "(I)Ljava/lang/Integer;")) == NULL
+                || (_jfr_sync_class = (jclass)env->NewGlobalRef(cls)) == NULL) {
             env->ExceptionDescribe();
             return Error("Failed to initialize JfrSync class");
         }
@@ -1451,8 +1426,7 @@ Error FlightRecorder::startMasterRecording(Arguments &args, const char *filename
         if (args._chunk_size > 0) {
             jmethodID method = env->GetStaticMethodID(options_class, "setMaxChunkSize", "(J)V");
             if (method != NULL) {
-                env->CallStaticVoidMethod(options_class, method,
-                                          args._chunk_size < 1024 * 1024 ? 1024 * 1024 : args._chunk_size);
+                env->CallStaticVoidMethod(options_class, method, args._chunk_size < 1024 * 1024 ? 1024 * 1024 : args._chunk_size);
             }
         }
 
@@ -1486,15 +1460,15 @@ Error FlightRecorder::startMasterRecording(Arguments &args, const char *filename
 }
 
 void FlightRecorder::stopMasterRecording() {
-    JNIEnv * env = VM::jni();
+    JNIEnv* env = VM::jni();
     env->CallStaticVoidMethod(_jfr_sync_class, _stop_method);
     env->ExceptionClear();
 }
 
 void FlightRecorder::recordEvent(int lock_index, int tid, u32 call_trace_id,
-                                 EventType event_type, Event *event) {
+                                 EventType event_type, Event* event) {
     if (_rec != NULL) {
-        Buffer *buf = _rec->buffer(lock_index);
+        Buffer* buf = _rec->buffer(lock_index);
         switch (event_type) {
             case PERF_SAMPLE:
             case EXECUTION_SAMPLE:
@@ -1502,22 +1476,22 @@ void FlightRecorder::recordEvent(int lock_index, int tid, u32 call_trace_id,
                 _rec->recordExecutionSampleTrace(buf, tid, call_trace_id, (ExecutionEvent *) event);
                 break;
             case ALLOC_SAMPLE:
-                _rec->recordAllocationInNewTLAB(buf, tid, call_trace_id, (AllocEvent *) event);
+                _rec->recordAllocationInNewTLAB(buf, tid, call_trace_id, (AllocEvent*)event);
                 break;
             case ALLOC_OUTSIDE_TLAB:
-                _rec->recordAllocationOutsideTLAB(buf, tid, call_trace_id, (AllocEvent *) event);
+                _rec->recordAllocationOutsideTLAB(buf, tid, call_trace_id, (AllocEvent*)event);
                 break;
             case LIVE_OBJECT:
-                _rec->recordLiveObject(buf, tid, call_trace_id, (LiveObject *) event);
+                _rec->recordLiveObject(buf, tid, call_trace_id, (LiveObject*)event);
                 break;
             case LOCK_SAMPLE:
-                _rec->recordMonitorBlocked(buf, tid, call_trace_id, (LockEvent *) event);
+                _rec->recordMonitorBlocked(buf, tid, call_trace_id, (LockEvent*)event);
                 break;
             case PARK_SAMPLE:
-                _rec->recordThreadPark(buf, tid, call_trace_id, (LockEvent *) event);
+                _rec->recordThreadPark(buf, tid, call_trace_id, (LockEvent*)event);
                 break;
             case PROFILING_WINDOW:
-                _rec->recordWindow(buf, tid, (ProfilingWindow *) event);
+                _rec->recordWindow(buf, tid, (ProfilingWindow*)event);
                 break;
         }
         _rec->flushIfNeeded(buf);
@@ -1525,14 +1499,14 @@ void FlightRecorder::recordEvent(int lock_index, int tid, u32 call_trace_id,
     }
 }
 
-void FlightRecorder::recordLog(LogLevel level, const char *message, size_t len) {
+void FlightRecorder::recordLog(LogLevel level, const char* message, size_t len) {
     if (!_rec_lock.tryLockShared()) {
         // No active recording
         return;
     }
 
     if (len > MAX_STRING_LENGTH) len = MAX_STRING_LENGTH;
-    Buffer *buf = (Buffer *) alloca(len + 40);
+    Buffer* buf = (Buffer*)alloca(len + 40);
     buf->reset();
 
     int start = buf->skip(5);

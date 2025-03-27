@@ -33,6 +33,7 @@ class Event {
 class ExecutionEvent : public Event {
   public:
     ThreadState _thread_state;
+
     ExecutionEvent() : _thread_state(THREAD_UNKNOWN) {
     }
 };
