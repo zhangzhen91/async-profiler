@@ -8,8 +8,8 @@ LIB_PROFILER=lib/libasyncProfiler.$(SOEXT)
 API_JAR=lib/async-profiler.jar
 CONVERTER_JAR=lib/converter.jar
 
-CFLAGS=-O3 -fno-exceptions -g
-CXXFLAGS=-O3 -fno-exceptions -fno-omit-frame-pointer -fvisibility=hidden -g
+CFLAGS=-O3 -fno-exceptions
+CXXFLAGS=-O3 -fno-exceptions -fno-omit-frame-pointer -fvisibility=hidden
 INCLUDES=-I$(JAVA_HOME)/include -Isrc/helper
 LIBS=-ldl -lpthread
 MERGE=true
@@ -45,7 +45,7 @@ ifeq ($(OS),Darwin)
     MERGE=false
   endif
 else
-  CXXFLAGS += -Wl,-z,defs
+  CXXFLAGS += -Wl,-z,defs -static-libstdc++ -static-libgcc
   ifeq ($(MERGE),true)
     CXXFLAGS += -fwhole-program
   endif
@@ -101,7 +101,7 @@ $(PACKAGE_NAME).tar.gz: $(PACKAGE_DIR)
 	rm -r $(PACKAGE_DIR)
 
 $(PACKAGE_NAME).zip: $(PACKAGE_DIR)
-	codesign -s "Developer ID" -o runtime --timestamp -v $(PACKAGE_DIR)/$(LAUNCHER) $(PACKAGE_DIR)/$(LIB_PROFILER)
+	# codesign -s "Developer ID" -o runtime --timestamp -v $(PACKAGE_DIR)/$(LAUNCHER) $(PACKAGE_DIR)/$(LIB_PROFILER)
 	ditto -c -k --keepParent $(PACKAGE_DIR) $@
 	rm -r $(PACKAGE_DIR)
 
@@ -154,9 +154,10 @@ test: all
 
 native:
 	mkdir -p native/linux-x64 native/linux-arm64 native/macos
-	tar xfO async-profiler-$(PROFILER_VERSION)-linux-x64.tar.gz */build/libasyncProfiler.so > native/linux-x64/libasyncProfiler.so
-	tar xfO async-profiler-$(PROFILER_VERSION)-linux-arm64.tar.gz */build/libasyncProfiler.so > native/linux-arm64/libasyncProfiler.so
-	unzip -p async-profiler-$(PROFILER_VERSION)-macos.zip */build/libasyncProfiler.so > native/macos/libasyncProfiler.so
+	cp ./build/lib/async-profiler.jar native/prod
+	tar xfO async-profiler-$(PROFILER_VERSION)-linux-x64.tar.gz */lib/libasyncProfiler.so > native/linux-x64/libasyncProfiler.so
+	tar xfO async-profiler-$(PROFILER_VERSION)-linux-arm64.tar.gz */lib/libasyncProfiler.so > native/linux-arm64/libasyncProfiler.so
+	unzip -p async-profiler-$(PROFILER_VERSION)-macos-x64.zip async-profiler-$(PROFILER_VERSION)-macos-x64/lib/libasyncProfiler.dylib > native/macos/libasyncProfiler.dylib
 
 clean:
 	$(RM) -r build
