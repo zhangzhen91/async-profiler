@@ -35,65 +35,55 @@
 class LinuxThreadList : public ThreadList {
   private:
     DIR* _dir;
-    int _thread_count;
+    int* _thread_array;
+    u32 _capacity;
 
-    int getThreadCount() {
-        char buf[512];
-        int fd = open("/proc/self/stat", O_RDONLY);
-        if (fd == -1) {
-            return 0;
+    void addThread(int thread_id) {
+        if (_count >= _capacity) {
+            _capacity = _count * 2;
+            _thread_array = (int*)realloc(_thread_array, _capacity * sizeof(int));
         }
+        _thread_array[_count++] = thread_id;
+    }
 
-        int thread_count = 0;
-        if (read(fd, buf, sizeof(buf)) > 0) {
-            char* s = strchr(buf, ')');
-            if (s != NULL) {
-                // Read 18th integer field after the command name
-                for (int field = 0; *s != ' ' || ++field < 18; s++) ;
-                thread_count = atoi(s + 1);
+    void fillThreadArray() {
+        if (_dir != NULL) {
+            rewinddir(_dir);
+            struct dirent* entry;
+            while ((entry = readdir(_dir)) != NULL) {
+                if (entry->d_name[0] != '.') {
+                    addThread(atoi(entry->d_name));
+                }
             }
         }
-
-        close(fd);
-        return thread_count;
     }
 
   public:
-    LinuxThreadList() {
+    LinuxThreadList() : ThreadList() {
         _dir = opendir("/proc/self/task");
-        _thread_count = -1;
+        _capacity = 128;
+        _thread_array = (int*)malloc(_capacity * sizeof(int));
+        fillThreadArray();
     }
 
     ~LinuxThreadList() {
+        free(_thread_array);
         if (_dir != NULL) {
             closedir(_dir);
         }
     }
 
-    void rewind() {
-        if (_dir != NULL) {
-            rewinddir(_dir);
-        }
-        _thread_count = -1;
-    }
-
     int next() {
-        if (_dir != NULL) {
-            struct dirent* entry;
-            while ((entry = readdir(_dir)) != NULL) {
-                if (entry->d_name[0] != '.') {
-                    return atoi(entry->d_name);
-                }
-            }
+        _index++;
+        if(_index > _count){
+            return -1;
         }
-        return -1;
+        return _thread_array[_index];
     }
 
-    int size() {
-        if (_thread_count < 0) {
-            _thread_count = getThreadCount();
-        }
-        return _thread_count;
+    void rewind() {
+        _index = _count = 0;
+        fillThreadArray();
     }
 };
 

@@ -15,7 +15,7 @@
 // when generating profiling signals. Otherwise applications with too many threads may
 // suffer from a big profiling overhead. Also, keeping this limit low enough helps
 // to avoid contention on a spin lock inside Profiler::recordSample().
-const int THREADS_PER_TICK = 8;
+const int THREADS_PER_TICK = 1000000000;
 
 // Set the hard limit for thread walking interval to 100 microseconds.
 // Smaller intervals are practically unusable due to large overhead.
@@ -87,6 +87,20 @@ void WallClock::stop() {
     pthread_join(_thread, NULL);
 }
 
+std::string getCurrentTimeString() {
+    auto now = std::chrono::system_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()) % 1000;
+
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm = *std::localtime(&t);
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y/%m/%d %H:%M:%S")
+        << "." << std::setfill('0') << std::setw(3) << ms.count();
+    return oss.str();
+}
+
 void WallClock::timerLoop() {
     int self = OS::threadId();
     ThreadFilter* thread_filter = Profiler::instance()->threadFilter();
@@ -94,49 +108,47 @@ void WallClock::timerLoop() {
     bool sample_idle_threads = _sample_idle_threads;
 
     ThreadList* thread_list = OS::listThreads();
-    long long next_cycle_time = OS::nanotime();
+    u64 cycle_start_time = OS::nanotime();
 
     while (_running) {
-        if (!_enabled) {
-            OS::sleep(_interval);
-            continue;
-        }
+        bool enabled = _enabled;
 
-        if (sample_idle_threads) {
-            // Try to keep the wall clock interval stable, regardless of the number of profiled threads
-            int estimated_thread_count = thread_filter_enabled ? thread_filter->size() : thread_list->size();
-            next_cycle_time += adjustInterval(_interval, estimated_thread_count);
-        }
-
-        for (int count = 0; count < THREADS_PER_TICK; ) {
+        for (int signaled_threads = 0; signaled_threads < THREADS_PER_TICK && thread_list->hasNext(); ) {
             int thread_id = thread_list->next();
-            if (thread_id == -1) {
-                thread_list->rewind();
-                break;
+            if (thread_id == self || thread_id <= 0) {
+                // On macOS, task_threads() may sporadically return 0 or -1 among thread IDs
+                continue;
+            }
+            if (thread_filter_enabled && !thread_filter->accept(thread_id)) {
+                continue;
             }
 
             if (thread_id == self || (thread_filter_enabled && !thread_filter->accept(thread_id))) {
                 continue;
             }
-
             if (sample_idle_threads || OS::threadState(thread_id) == THREAD_RUNNING) {
-                if (OS::sendSignalToThread(thread_id, _signal)) {
-                    count++;
+                if (enabled && OS::sendSignalToThread(thread_id, _signal)) {
+                    signaled_threads++;
                 }
             }
         }
 
-        if (sample_idle_threads) {
-            long long current_time = OS::nanotime();
-            if (next_cycle_time - current_time > MIN_INTERVAL) {
-                OS::sleep(next_cycle_time - current_time);
-            } else {
-                next_cycle_time = current_time + MIN_INTERVAL;
-                OS::sleep(MIN_INTERVAL);
-            }
+        u64 current_time = OS::nanotime();
+        if (thread_list->hasNext()) {
+            long long sleep_time = cycle_start_time + (u64)_interval * thread_list->index() / thread_list->size() - current_time;
+            OS::sleep(sleep_time < MIN_INTERVAL ? MIN_INTERVAL : sleep_time);
         } else {
-            OS::sleep(_interval);
+            // Cycle has ended: prepare for the next cycle
+            cycle_start_time += (u64)_interval;
+            long long sleep_time = cycle_start_time - current_time;
+            if (sleep_time < MIN_INTERVAL) {
+                cycle_start_time = current_time + MIN_INTERVAL;
+                sleep_time = MIN_INTERVAL;
+            }
+            OS::sleep(sleep_time);
+            thread_list->rewind();
         }
+
     }
 
     delete thread_list;
