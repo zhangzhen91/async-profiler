@@ -13,7 +13,7 @@
 // when generating profiling signals. Otherwise applications with too many threads may
 // suffer from a big profiling overhead. Also, keeping this limit low enough helps
 // to avoid contention on a spin lock inside Profiler::recordSample().
-const int THREADS_PER_TICK = 1000000000;
+const int THREADS_PER_TICK = 8;
 
 // Set the hard limit for thread walking interval to 100 microseconds.
 // Smaller intervals are practically unusable due to large overhead.
