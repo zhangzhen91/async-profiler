@@ -153,11 +153,11 @@ test: all
 	echo "All tests passed"
 
 native:
-	mkdir -p native/linux-x64 native/linux-arm64 native/macos
+	mkdir -p native/linux-x64 native/linux-arm64 native/macos-64
 	cp ./build/lib/async-profiler.jar native/prod
 	tar xfO async-profiler-$(PROFILER_VERSION)-linux-x64.tar.gz */lib/libasyncProfiler.so > native/linux-x64/libasyncProfiler.so
 	tar xfO async-profiler-$(PROFILER_VERSION)-linux-arm64.tar.gz */lib/libasyncProfiler.so > native/linux-arm64/libasyncProfiler.so
-	unzip -p async-profiler-$(PROFILER_VERSION)-macos-x64.zip async-profiler-$(PROFILER_VERSION)-macos-x64/lib/libasyncProfiler.dylib > native/macos/libasyncProfiler.dylib
+	unzip -p async-profiler-$(PROFILER_VERSION)-macos-x64.zip async-profiler-$(PROFILER_VERSION)-macos-x64/lib/libasyncProfiler.dylib > native/macos-64/libasyncProfiler.dylib
 
 clean:
 	$(RM) -r build
