@@ -25,14 +25,14 @@ class MacThreadList : public ThreadList {
   private:
     task_t _task;
     thread_array_t _thread_array;
-    unsigned int _thread_count;
-    unsigned int _thread_index;
 
-    void ensureThreadArray() {
-        if (_thread_array == NULL) {
-            _thread_count = 0;
-            _thread_index = 0;
-            task_threads(_task, &_thread_array, &_thread_count);
+    void deallocate() {
+        if (_thread_array != NULL) {
+            for (u32 i = 0; i < _count; i++) {
+                mach_port_deallocate(_task, _thread_array[i]);
+            }
+            vm_deallocate(_task, (vm_address_t)_thread_array, _count * sizeof(thread_t));
+            _thread_array = NULL;
         }
     }
 
@@ -40,33 +40,25 @@ class MacThreadList : public ThreadList {
     MacThreadList() {
         _task = mach_task_self();
         _thread_array = NULL;
+        task_threads(_task, &_thread_array, &_count);
     }
 
     ~MacThreadList() {
-        rewind();
-    }
-
-    void rewind() {
-        if (_thread_array != NULL) {
-            for (int i = 0; i < _thread_count; i++) {
-                mach_port_deallocate(_task, _thread_array[i]);
-            }
-            vm_deallocate(_task, (vm_address_t)_thread_array, _thread_count * sizeof(thread_t));
-            _thread_array = NULL;
-        }
+        deallocate();
     }
 
     int next() {
-        ensureThreadArray();
-        if (_thread_index < _thread_count) {
-            return (int)_thread_array[_thread_index++];
+        _index++;
+        if(_index > _count){
+            return -1;
         }
-        return -1;
+        return (int)_thread_array[_index];
     }
 
-    int size() {
-        ensureThreadArray();
-        return _thread_count;
+    void rewind() {
+        deallocate();
+        _index = _count = 0;
+        task_threads(_task, &_thread_array, &_count);
     }
 };
 

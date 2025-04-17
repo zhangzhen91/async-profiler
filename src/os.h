@@ -27,11 +27,25 @@ enum ThreadState {
 
 
 class ThreadList {
+  protected:
+    u32 _index;
+    u32 _count;
+
+    ThreadList() : _index(0), _count(0) {
+    }
+
   public:
     virtual ~ThreadList() {}
-    virtual void rewind() = 0;
+
+    u32 index() const { return _index; }
+    u32 size() const { return _count; }
+
+    bool hasNext() const {
+        return _index < _count;
+    }
+
     virtual int next() = 0;
-    virtual int size() = 0;
+    virtual void rewind() = 0;
 };
 
 
