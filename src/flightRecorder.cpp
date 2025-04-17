@@ -603,8 +603,8 @@ class Recording {
         _start_time = _stop_time;
         _start_ticks = _stop_ticks;
         if (fd > 0) {
-//            OS::copyFile(_fd, fd, 0, _chunk_start);
-//            OS::truncateFile(_fd);
+            OS::copyFile(_fd, fd, 0, _chunk_start);
+            OS::truncateFile(_fd);
             _base_id = 0;
             _chunk_start = 0;
         } else {
