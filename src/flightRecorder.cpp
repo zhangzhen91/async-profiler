@@ -551,14 +551,60 @@ class Recording {
         _buf->reset();
         return chunk_end;
     }
+    // custom 为了写入自定义的文件中
+    off_t finishChunk(int _fd) {
+        flush(&_monitor_buf, _fd);
+
+        writeNativeLibraries(_buf);
+
+        for (int i = 0; i < CONCURRENCY_LEVEL; i++) {
+            flush(&_buf[i], _fd);
+        }
+
+        _stop_time = OS::micros();
+        _stop_ticks = TSC::ticks();
+
+        off_t cpool_offset = lseek(_fd, 0, SEEK_CUR);
+        writeCpool(_buf);
+        flush(_buf, _fd);
+
+        off_t chunk_end = lseek(_fd, 0, SEEK_CUR);
+
+        // Patch cpool size field
+        _buf->putVar32(0, chunk_end - cpool_offset);
+        ssize_t result = pwrite(_fd, _buf->data(), 5, cpool_offset);
+        (void)result;
+
+        // Workaround for JDK-8191415: compute actual TSC frequency, in case JFR is wrong
+        u64 tsc_frequency = TSC::frequency();
+        if (TSC::enabled()) {
+            tsc_frequency = (u64)(double(_stop_ticks - _start_ticks) / double(_stop_time - _start_time) * 1000000);
+        }
+
+        // Patch chunk header
+        _buf->put64(chunk_end - _chunk_start);
+        _buf->put64(cpool_offset - _chunk_start);
+        _buf->put64(68);
+        _buf->put64(_start_time * 1000);
+        _buf->put64((_stop_time - _start_time) * 1000);
+        _buf->put64(_start_ticks);
+        _buf->put64(tsc_frequency);
+        result = pwrite(_fd, _buf->data(), 56, _chunk_start + 8);
+        (void)result;
+
+        OS::freePageCache(_fd, _chunk_start);
+
+        _buf->reset();
+        return chunk_end;
+    }
 
     void switchChunk(int fd) {
-        _chunk_start = finishChunk();
+        _chunk_start = finishChunk(fd);
         _start_time = _stop_time;
         _start_ticks = _stop_ticks;
         if (fd > 0) {
-            OS::copyFile(_fd, fd, 0, _chunk_start);
-            OS::truncateFile(_fd);
+//            OS::copyFile(_fd, fd, 0, _chunk_start);
+//            OS::truncateFile(_fd);
             _base_id = 0;
             _chunk_start = 0;
         } else {
@@ -717,6 +763,14 @@ class Recording {
     }
 
     void flush(Buffer* buf) {
+        ssize_t result = write(_fd, buf->data(), buf->offset());
+        if (result > 0) {
+            atomicInc(_bytes_written, result);
+        }
+        buf->reset();
+    }
+    // custom 为了写入自定义的文件
+    void flush(Buffer* buf, int _fd) {
         ssize_t result = write(_fd, buf->data(), buf->offset());
         if (result > 0) {
             atomicInc(_bytes_written, result);
