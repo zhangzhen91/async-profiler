@@ -140,7 +140,7 @@ $(PACKAGE_NAME).tar.gz: $(PACKAGE_DIR)
 $(PACKAGE_NAME).zip: $(PACKAGE_DIR)
 	truncate -cs -`stat -f "%z" build/$(CONVERTER_JAR)` $(PACKAGE_DIR)/$(JFRCONV)
 ifneq ($(GITHUB_ACTIONS), true)
-	codesign -s "Developer ID" -o runtime --timestamp -v $(PACKAGE_DIR)/$(ASPROF) $(PACKAGE_DIR)/$(JFRCONV) $(PACKAGE_DIR)/$(LIB_PROFILER)
+	# codesign -s "Developer ID" -o runtime --timestamp -v $(PACKAGE_DIR)/$(ASPROF) $(PACKAGE_DIR)/$(JFRCONV) $(PACKAGE_DIR)/$(LIB_PROFILER)
 endif
 	cat build/$(CONVERTER_JAR) >> $(PACKAGE_DIR)/$(JFRCONV)
 	ditto -c -k --keepParent $(PACKAGE_DIR) $@
@@ -245,9 +245,9 @@ build/$(TEST_JAR): $(TEST_SOURCES) build/$(CONVERTER_JAR)
 
 native:
 	mkdir -p native/linux-x64 native/linux-arm64 native/macos
-	tar xfO async-profiler-$(PROFILER_VERSION)-linux-x64.tar.gz */build/libasyncProfiler.so > native/linux-x64/libasyncProfiler.so
-	tar xfO async-profiler-$(PROFILER_VERSION)-linux-arm64.tar.gz */build/libasyncProfiler.so > native/linux-arm64/libasyncProfiler.so
-	unzip -p async-profiler-$(PROFILER_VERSION)-macos.zip */build/libasyncProfiler.dylib > native/macos/libasyncProfiler.dylib
+	tar xfO async-profiler-$(PROFILER_VERSION)-linux-x64.tar.gz async-profiler-$(PROFILER_VERSION)-linux-x64/lib/libasyncProfiler.so > native/linux-x64/libasyncProfiler.so
+	tar xfO async-profiler-$(PROFILER_VERSION)-linux-arm64.tar.gz async-profiler-$(PROFILER_VERSION)-linux-arm64/lib/libasyncProfiler.so > native/linux-arm64/libasyncProfiler.so
+	unzip -p async-profiler-$(PROFILER_VERSION)-macos.zip async-profiler-$(PROFILER_VERSION)-macos/lib/libasyncProfiler.dylib > native/macos/libasyncProfiler.dylib
 
 check-md:
 	prettier -c README.md "docs/**/*.md"
