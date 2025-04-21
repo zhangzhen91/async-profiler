@@ -11,7 +11,7 @@
 #include "os.h"
 #include "profiler.h"
 #include "vmStructs.h"
-
+#include "context.h"
 
 INCLUDE_HELPER_CLASS(SERVER_NAME, SERVER_CLASS, "one/profiler/Server")
 
@@ -115,6 +115,74 @@ Java_one_profiler_AsyncProfiler_filterThread0(JNIEnv* env, jobject unused, jthre
     } else {
         thread_filter->remove(thread_id);
     }
+}
+
+// custom
+
+/*
+ * Class:     one_profiler_AsyncProfiler
+ * Method:    getTid0
+ * Signature: ()I
+ */
+extern "C" DLLEXPORT jint
+JNICALL Java_one_profiler_AsyncProfiler_getTid0
+        (JNIEnv *, jclass){
+    return OS::threadId();
+}
+
+/*
+ * Class:     one_profiler_AsyncProfiler
+ * Method:    getContextPageOffset0
+ * Signature: (I)J
+ */
+extern "C" DLLEXPORT jlong JNICALL
+Java_one_profiler_AsyncProfiler_getContextPageOffset0
+        (JNIEnv *, jclass, jint tid){
+    return reinterpret_cast<jlong>(Context::getInstance().getPage(tid));
+}
+
+extern "C" DLLEXPORT jobject JNICALL
+Java_one_profiler_AsyncProfiler_getContextPage0
+  (JNIEnv* env, jclass, jint tid){
+
+    // 调用 Contexts::getPage 获取页的起始地址
+    ContextPage* pageAddress = Context::getInstance().getPage(tid);
+    if (!pageAddress) {
+        return nullptr; // 如果获取失败，返回 null
+    }
+    // 创建一个直接字节缓冲区
+    jobject byteBuffer = env->NewDirectByteBuffer(pageAddress, sizeof(pageAddress->slots));
+    if (!byteBuffer) {
+        // 如果创建失败，释放内存（如果需要）
+        // 注意：NewDirectByteBuffer 不会分配内存，因此不需要释放 pageAddress
+        return nullptr;
+    }
+
+    return byteBuffer;
+}
+
+/*
+ * Class:     one_profiler_AsyncProfiler
+ * Method:    getMaxContextPages0
+ * Signature: ()I
+ */
+extern "C" DLLEXPORT jint JNICALL
+Java_one_profiler_AsyncProfiler_getMaxContextPages0
+        (JNIEnv *, jclass){
+    return Context::getInstance().maxPages();
+}
+
+/*
+ * Class:     one_profiler_AsyncProfiler
+ * Method:    dump0
+ * Signature: (Ljava/lang/String;)V
+ */
+extern "C" DLLEXPORT void JNICALL
+Java_one_profiler_AsyncProfiler_dump0
+        (JNIEnv * env, jclass, jstring fileName) {
+    const char* fileName_str = env->GetStringUTFChars(fileName, NULL);
+    Profiler* profiler = Profiler::instance();
+    profiler->dump(fileName_str);
 }
 
 

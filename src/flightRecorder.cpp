@@ -27,6 +27,7 @@
 #include "threadLocalData.h"
 #include "tsc.h"
 #include "vmStructs.h"
+#include "context.h"
 
 
 INCLUDE_HELPER_CLASS(JFR_SYNC_NAME, JFR_SYNC_CLASS, "one/profiler/JfrSync")
@@ -580,6 +581,22 @@ class Recording {
         return chunk_end;
     }
 
+    void switchChunk(int fd) {
+
+        int _fd_copy = _fd;
+        OS::copyFile(_fd, fd, 0, lseek(_fd, 0, SEEK_END));
+        _fd = fd;
+        finishChunk();
+        _start_time = _stop_time;
+        _start_ticks = _stop_ticks;
+        close(_fd);
+        _fd = _fd_copy;
+        if (_memfd >= 0) {
+            while (ftruncate(_memfd, 0) < 0 && errno == EINTR);  // restart if interrupted
+            _in_memory = true;
+        }
+    }
+
     void switchChunk() {
         _chunk_start = finishChunk();
         _start_time = _stop_time;
@@ -732,6 +749,15 @@ class Recording {
 
     void flush(Buffer* buf) {
         ssize_t result = write(_in_memory ? _memfd : _fd, buf->data(), buf->offset());
+        if (result > 0) {
+            atomicInc(_bytes_written, result);
+        }
+        buf->reset();
+    }
+
+    void flush(Buffer* buf, int fd) {
+         std::cout << "[" << _in_memory << "] " << std::endl;
+        ssize_t result = write(_in_memory ? _memfd : fd, buf->data(), buf->offset());
         if (result > 0) {
             atomicInc(_bytes_written, result);
         }
@@ -1200,6 +1226,14 @@ class Recording {
         buf->putVar32(tid);
         buf->putVar32(call_trace_id);
         buf->putVar32(event->_thread_state);
+        ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
+        if (threadContext != nullptr) {
+            buf->putVar64(threadContext->trace_id);
+            buf->putVar64(threadContext->span_id);
+        } else {
+            buf->putVar64(0);
+            buf->putVar64(0);
+        }
         buf->put8(start, buf->offset() - start);
     }
 
@@ -1211,6 +1245,14 @@ class Recording {
         buf->putVar32(call_trace_id);
         buf->putVar32(event->_thread_state);
         buf->putVar32(event->_samples);
+        ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
+        if (threadContext != nullptr) {
+            buf->putVar64(threadContext->trace_id);
+            buf->putVar64(threadContext->span_id);
+        } else {
+            buf->putVar64(0);
+            buf->putVar64(0);
+        }
         buf->put8(start, buf->offset() - start);
     }
 
@@ -1395,6 +1437,15 @@ void FlightRecorder::flush() {
     if (_rec != NULL) {
         _rec_lock.lock();
         _rec->switchChunk();
+        _rec_lock.unlock();
+    }
+}
+
+void FlightRecorder::flush(const char* filename) {
+    if (_rec != NULL) {
+        _rec_lock.lock();
+        int fd = open(filename, O_CREAT | O_RDWR | 0, 0644);
+        _rec->switchChunk(fd);
         _rec_lock.unlock();
     }
 }

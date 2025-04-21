@@ -1360,6 +1360,22 @@ Error Profiler::flushJfr() {
     return Error::OK;
 }
 
+Error Profiler::dump(const char* filename) {
+    MutexLocker ml(_state_lock);
+    if (_state != IDLE && _state != RUNNING) {
+        return Error("Profiler has not started");
+    }
+
+    if (_state == RUNNING) {
+        updateJavaThreadNames();
+        updateNativeThreadNames();
+        lockAll();
+        _jfr.flush(filename);
+        unlockAll();
+    }
+    return Error::OK;
+}
+
 Error Profiler::dump(Writer& out, Arguments& args) {
     MutexLocker ml(_state_lock);
     if (_state != IDLE && _state != RUNNING) {
