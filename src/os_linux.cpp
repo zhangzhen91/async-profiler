@@ -383,4 +383,11 @@ void OS::freePageCache(int fd, off_t start_offset) {
     posix_fadvise(fd, start_offset & ~page_mask, 0, POSIX_FADV_DONTNEED);
 }
 
+int OS::truncateFile(int fd) {
+    int result = ftruncate(fd, 0LL);
+    if (result == 0) {
+        return lseek(fd, 0LL, SEEK_SET);
+    }
+    return result;
+}
 #endif // __linux__

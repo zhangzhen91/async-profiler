@@ -583,14 +583,18 @@ class Recording {
 
     void switchChunk(int fd) {
 
-        int _fd_copy = _fd;
-        OS::copyFile(_fd, fd, 0, lseek(_fd, 0, SEEK_END));
-        _fd = fd;
         finishChunk();
+        OS::copyFile(_fd, fd, 0, lseek(_fd, 0, SEEK_END));
         _start_time = _stop_time;
         _start_ticks = _stop_ticks;
-        close(_fd);
-        _fd = _fd_copy;
+        _base_id = 0;
+        _bytes_written = 0;
+		OS::truncateFile(_fd);
+        writeHeader(_buf);
+        writeMetadata(_buf);
+        writeRecordingInfo(_buf);
+        flush(_buf);
+
         if (_memfd >= 0) {
             while (ftruncate(_memfd, 0) < 0 && errno == EINTR);  // restart if interrupted
             _in_memory = true;
@@ -749,15 +753,6 @@ class Recording {
 
     void flush(Buffer* buf) {
         ssize_t result = write(_in_memory ? _memfd : _fd, buf->data(), buf->offset());
-        if (result > 0) {
-            atomicInc(_bytes_written, result);
-        }
-        buf->reset();
-    }
-
-    void flush(Buffer* buf, int fd) {
-         std::cout << "[" << _in_memory << "] " << std::endl;
-        ssize_t result = write(_in_memory ? _memfd : fd, buf->data(), buf->offset());
         if (result > 0) {
             atomicInc(_bytes_written, result);
         }
@@ -1446,6 +1441,7 @@ void FlightRecorder::flush(const char* filename) {
         _rec_lock.lock();
         int fd = open(filename, O_CREAT | O_RDWR | 0, 0644);
         _rec->switchChunk(fd);
+        close(fd);
         _rec_lock.unlock();
     }
 }
