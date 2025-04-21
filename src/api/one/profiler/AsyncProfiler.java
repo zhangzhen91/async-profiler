@@ -133,10 +133,20 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
             String extractPath = System.getProperty("one.profiler.extractPath");
             File file = File.createTempFile("libasyncProfiler-", ".so",
                     extractPath == null || extractPath.isEmpty() ? null : new File(extractPath));
-            try (FileOutputStream out = new FileOutputStream(file)) {
+            FileOutputStream out = null;
+            try {
+                out = new FileOutputStream(file);
                 byte[] buf = new byte[32000];
-                for (int bytes; (bytes = in.read(buf)) >= 0; ) {
+                int bytes;
+                while ((bytes = in.read(buf)) >= 0) {
                     out.write(buf, 0, bytes);
+                }
+            } finally {
+                if (out != null) {
+                    try {
+                        out.close();
+                    } catch (IOException ignore) {
+                    }
                 }
             }
             return file;
