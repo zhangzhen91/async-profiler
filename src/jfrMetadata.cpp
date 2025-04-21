@@ -227,7 +227,9 @@ JfrMetadata::JfrMetadata() : Element("root") {
                 << field("sampledThread", T_THREAD, "Thread", F_CPOOL)
                 << field("stackTrace", T_STACK_TRACE, "Stack Trace", F_CPOOL)
                 << field("state", T_THREAD_STATE, "Thread State", F_CPOOL)
-                << field("samples", T_INT, "Samples", F_UNSIGNED))
+                << field("samples", T_INT, "Samples", F_UNSIGNED)
+                << field("traceId", T_LONG, "Trace Id")
+                << field("contextId", T_LONG, "Context Id"))
 
             << (type("profiler.Malloc", T_MALLOC, "malloc")
                 << category("Java Virtual Machine", "Native Memory")

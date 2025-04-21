@@ -27,6 +27,7 @@ class FlightRecorder {
     Error start(Arguments& args, bool reset);
     void stop();
     void flush();
+    void flush(const char* filename);
     size_t usedMemory();
     bool timerTick(u64 wall_time, u32 gc_id);
 
