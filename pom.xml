@@ -32,6 +32,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <native.platform>linux-x64</native.platform>
+
     </properties>
 
     <build>
