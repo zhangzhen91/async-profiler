@@ -1221,14 +1221,9 @@ class Recording {
         buf->putVar32(tid);
         buf->putVar32(call_trace_id);
         buf->putVar32(event->_thread_state);
-        ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
-        if (threadContext != nullptr) {
-            buf->putVar64(threadContext->trace_id);
-            buf->putVar64(threadContext->span_id);
-        } else {
-            buf->putVar64(0);
-            buf->putVar64(0);
-        }
+        buf->putVar64(event->trace_id);
+        buf->putVar64(event->span_id);
+        buf->putVar64(event->extend);
         buf->put8(start, buf->offset() - start);
     }
 
@@ -1240,14 +1235,9 @@ class Recording {
         buf->putVar32(call_trace_id);
         buf->putVar32(event->_thread_state);
         buf->putVar32(event->_samples);
-        ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
-        if (threadContext != nullptr) {
-            buf->putVar64(threadContext->trace_id);
-            buf->putVar64(threadContext->span_id);
-        } else {
-            buf->putVar64(0);
-            buf->putVar64(0);
-        }
+        buf->putVar64(event->trace_id);
+        buf->putVar64(event->span_id);
+        buf->putVar64(event->extend);
         buf->put8(start, buf->offset() - start);
     }
 

@@ -10,7 +10,7 @@
 #include "profiler.h"
 #include "stackFrame.h"
 #include "tsc.h"
-
+#include "context.h"
 
 // Maximum number of threads sampled in one iteration. This limit serves as a throttle
 // when generating profiling signals. Otherwise applications with too many threads may
@@ -29,7 +29,6 @@ const u64 RUNNABLE_THRESHOLD_NS = 10000;
 // How many skipped idle samples can be recorded in a single WallClock event.
 const u32 MAX_IDLE_BATCH = 1000;
 
-
 struct ThreadSleepState {
     u64 start_time;
     u64 last_cpu_time;
@@ -37,7 +36,7 @@ struct ThreadSleepState {
     u32 counter;
 };
 
-typedef std::map<int, ThreadSleepState> ThreadSleepMap;
+typedef std::map<Key, ThreadSleepState> ThreadSleepMap;
 
 struct ThreadCpuTime {
     u64 cpu_time;
@@ -87,7 +86,8 @@ class ThreadCpuTimeBuffer {
             u64 trace = t.trace;
             if (__sync_bool_compare_and_swap(&t.cpu_time, cpu_time, 0)) {
                 int thread_id = trace >> 32;
-                ThreadSleepState& tss = thread_sleep_state[thread_id];
+                Key key = WallClock::buildKey(thread_id);
+                ThreadSleepState& tss = thread_sleep_state[key];
                 tss.last_cpu_time = cpu_time;
                 tss.call_trace_id = (u32)trace;
                 tss.counter = 0;
@@ -142,11 +142,14 @@ void WallClock::signalHandler(int signo, siginfo_t* siginfo, void* ucontext) {
     }
 }
 
-void WallClock::recordWallClock(u64 start_time, ThreadState state, u32 samples, int tid, u32 call_trace_id) {
+void WallClock::recordWallClock(u64 start_time, ThreadState state, u32 samples, int tid, u32 call_trace_id, Key key) {
     WallClockEvent event;
     event._start_time = start_time;
     event._thread_state = state;
     event._samples = samples;
+    event.trace_id = key.trace_id;
+    event.span_id = key.span_id;
+    event.extend = key.extend;
     Profiler::instance()->recordExternalSamples(samples, samples * _interval, tid, call_trace_id, WALL_CLOCK_SAMPLE, &event);
 }
 
@@ -182,6 +185,15 @@ void WallClock::stop() {
     pthread_join(_thread, NULL);
 }
 
+Key WallClock::buildKey(int tid) {
+    ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
+    if (threadContext != nullptr) {
+        return {tid, threadContext->trace_id, threadContext->span_id, threadContext->extend};
+    } else {
+        return {tid, 0, 0, 0};
+    }
+}
+
 void WallClock::timerLoop() {
     int self = OS::threadId();
     ThreadFilter* thread_filter = Profiler::instance()->threadFilter();
@@ -211,7 +223,8 @@ void WallClock::timerLoop() {
                     continue;
                 }
             } else if (mode == WALL_BATCH) {
-                ThreadSleepState& tss = thread_sleep_state[thread_id];
+                Key key = buildKey(thread_id);
+                ThreadSleepState& tss = thread_sleep_state[key];
                 u64 new_thread_cpu_time = enabled ? OS::threadCpuTime(thread_id) : 0;
                 if (new_thread_cpu_time != 0 && new_thread_cpu_time - tss.last_cpu_time <= RUNNABLE_THRESHOLD_NS) {
                     if (++tss.counter < MAX_IDLE_BATCH) {
@@ -220,7 +233,7 @@ void WallClock::timerLoop() {
                     }
                 }
                 if (tss.counter != 0) {
-                    recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter, thread_id, tss.call_trace_id);
+                    recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter, thread_id, tss.call_trace_id, key);
                     tss.counter = 0;
                 }
             }
@@ -256,8 +269,11 @@ void WallClock::timerLoop() {
     // Flush remaining WallClock batches
     for (ThreadSleepMap::const_iterator it = thread_sleep_state.begin(); it != thread_sleep_state.end(); ++it) {
         const ThreadSleepState& tss = it->second;
+        const Key key = it->first;
         if (tss.counter != 0) {
-            recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter, it->first, tss.call_trace_id);
+            recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter, key.tid, tss.call_trace_id, key);
         }
     }
 }
+
+

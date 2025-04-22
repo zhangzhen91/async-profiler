@@ -11,7 +11,7 @@
 struct ThreadContext {
     int64_t trace_id;
     int64_t span_id;
-    int64_t noop;
+    int64_t extend;
 
 };
 

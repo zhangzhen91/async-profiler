@@ -26,6 +26,10 @@ enum EventType {
 };
 
 class Event {
+  public:
+    int64_t trace_id;
+    int64_t span_id;
+    int64_t extend;
 };
 
 class EventWithClassId : public Event {
@@ -37,7 +41,6 @@ class ExecutionEvent : public Event {
   public:
     u64 _start_time;
     ThreadState _thread_state;
-
     ExecutionEvent(u64 start_time) : _start_time(start_time), _thread_state(THREAD_UNKNOWN) {}
 };
 

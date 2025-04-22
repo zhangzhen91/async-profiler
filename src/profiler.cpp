@@ -616,6 +616,16 @@ u64 Profiler::recordSample(void* ucontext, u64 counter, EventType event_type, Ev
     atomicInc(_total_samples);
 
     int tid = fastThreadId();
+    ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
+    if (threadContext != nullptr) {
+        event->trace_id = threadContext->trace_id;
+        event->span_id = threadContext->span_id;
+        event->extend = threadContext->extend;
+    } else {
+        event->trace_id = 0;
+        event->span_id = 0;
+        event->extend = 0;
+    }
     u32 lock_index = getLockIndex(tid);
     if (!_locks[lock_index].tryLock() &&
         !_locks[lock_index = (lock_index + 1) % CONCURRENCY_LEVEL].tryLock() &&
