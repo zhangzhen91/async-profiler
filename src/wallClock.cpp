@@ -224,7 +224,6 @@ void WallClock::timerLoop() {
                 ThreadContext *currentThreadContext = Context::getInstance().getThreadContext(thread_id);
                 if (tss.trace_id != currentThreadContext->trace_id || tss.span_id != currentThreadContext->span_id) {
                     if (tss.counter != 0) {
-                       Log::debug(" report, traceid = %lld count=%u",  tss.trace_id, tss.counter);
                        recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter, thread_id, tss.call_trace_id, tss.trace_id, tss.span_id, tss.extend);
                     }
                     tss.counter = 0;
