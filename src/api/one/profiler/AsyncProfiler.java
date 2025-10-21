@@ -96,21 +96,21 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
 
     private void setContextByteBuffer(int tid, long traceId, long spanId) {
         if (this.contextStorage != null) {
-            ByteBuffer var6 = this.getPage(tid);
-            int var7 = tid % 1024 * 24;
-            var6.putLong(var7 + 0, traceId);
-            var6.putLong(var7 + 8, spanId);
+            ByteBuffer contextPage = this.getPage(tid);
+            int baseIndex = tid % 1024 * 24;
+            contextPage.putLong(baseIndex + 0, traceId);
+            contextPage.putLong(baseIndex + 8, spanId);
         }
     }
 
-    private ByteBuffer getPage(int var1) {
-        int var2 = var1 / 1024;
-        ByteBuffer var3 = this.contextStorage[var2];
-        if (var3 == null) {
-            this.contextStorage[var2] = var3 = getContextPage0(var1).order(ByteOrder.LITTLE_ENDIAN);
+    private ByteBuffer getPage(int tid) {
+        int pageIndex = tid / 1024;
+        ByteBuffer contextPage = this.contextStorage[pageIndex];
+        if (contextPage == null) {
+            this.contextStorage[pageIndex] = contextPage = getContextPage0(tid).order(ByteOrder.LITTLE_ENDIAN);
         }
 
-        return var3;
+        return contextPage;
     }
 
     private long getPageUnsafe(int tid) {
