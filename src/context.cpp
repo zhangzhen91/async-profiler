@@ -12,15 +12,15 @@ Context &Context::getInstance() {
 }
 
 Context::Context() {
-    _maxPages = pages(OS::getMaxThreadId());
+    _maxPages = pages(OS::getMaxThreadId()) + 1;
     _pages.resize(_maxPages, nullptr);
 }
 
 unsigned int Context::pages(int tid) {
-    return (unsigned int) (tid + 1023) >> 10;
+    return static_cast<unsigned int>(tid) >> 10;
 }
 
-unsigned int Context::maxPages() {
+unsigned int Context::maxPages() const {
     return this->_maxPages;
 }
 
@@ -32,24 +32,25 @@ ThreadContext *Context::getThreadContext(int tid) {
 
 ContextPage *Context::getPage(int tid) {
     unsigned int pageIndex = pages(tid);
+    if (pageIndex > this->_maxPages) {
+        return nullptr;
+    }
     ContextPage *contextPage = this->_pages[pageIndex];
     if (contextPage == nullptr) {
         contextPage = new ContextPage();
         this->_pages[pageIndex] = contextPage;
     }
-    // No need to check if threadContext is nullptr since slots are objects
     return contextPage;
 }
 
-//int main(){
-//    // 调用 Contexts::getPage 获取页的起始地址
-//    int tid = 12099;
-//    ContextPage* pageAddress = Context::getInstance().getPage(tid);
-//    if (!pageAddress) {
-//        return 0; // 如果获取失败，返回 null
-//    }
-//    // 创建一个直接字节缓冲区
-//    std::cout << sizeof(pageAddress->slots) << std::endl;
-//
-//    return 0;
-//}
+// int main(){
+//     // 调用 Contexts::getPage 获取页的起始地址
+//     for (int i = 0; i < 6544320; ++i) {
+//         ContextPage* pageAddress = Context::getInstance().getPage(i+1024);
+//         if (!pageAddress) {
+//             std::cout << "Info: This is a log message" << std::endl;
+//             return 0; // 如果获取失败，返回 null
+//         }
+//     }
+//     return 0;
+// }

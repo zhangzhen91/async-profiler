@@ -22,14 +22,14 @@ struct ContextPage {
 class Context {
 public:
     static Context& getInstance();
-    unsigned int maxPages();
+    unsigned int maxPages() const;
     ContextPage* getPage(int tid);
     ThreadContext* getThreadContext(int tid);
 
 
 private:
     Context();
-    unsigned int pages(int tid);
+    static unsigned int pages(int tid);
 
     std::vector<ContextPage*> _pages;
     unsigned int _maxPages;
