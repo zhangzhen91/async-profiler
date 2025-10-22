@@ -32,7 +32,7 @@ ThreadContext *Context::getThreadContext(int tid) {
 
 ContextPage *Context::getPage(int tid) {
     unsigned int pageIndex = pages(tid);
-    if (pageIndex > this->_maxPages) {
+    if (pageIndex >= this->_maxPages) {
         return nullptr;
     }
     ContextPage *contextPage = this->_pages[pageIndex];
