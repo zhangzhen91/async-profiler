@@ -91,7 +91,6 @@ class ThreadCpuTimeBuffer {
             u64 trace = t.trace;
             if (__sync_bool_compare_and_swap(&t.cpu_time, cpu_time, 0)) {
                 int thread_id = trace >> 32;
-                ThreadContext *currentThreadContext = Context::getInstance().getThreadContext(thread_id);
                 ThreadSleepState& tss = thread_sleep_state[thread_id];
                 tss.last_cpu_time = cpu_time;
                 tss.call_trace_id = (u32)trace;
@@ -222,15 +221,18 @@ void WallClock::timerLoop() {
                 ThreadSleepState& tss = thread_sleep_state[thread_id];
                 // 查看前span是否结束。结束替换并上报重置
                 ThreadContext *currentThreadContext = Context::getInstance().getThreadContext(thread_id);
-                if (tss.trace_id != currentThreadContext->trace_id || tss.span_id != currentThreadContext->span_id) {
-                    if (tss.counter != 0) {
-                       recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter, thread_id, tss.call_trace_id, tss.trace_id, tss.span_id, tss.extend);
-                    }
-                    tss.counter = 0;
-                    tss.trace_id = currentThreadContext ->trace_id;
-                    tss.span_id = currentThreadContext ->span_id;
-                    tss.extend = currentThreadContext ->extend;
+                if (currentThreadContext != nullptr) {
+                   if (tss.trace_id != currentThreadContext->getTraceId() || tss.span_id != currentThreadContext->getSpanId()) {
+                       if (tss.counter != 0) {
+                          recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter, thread_id, tss.call_trace_id, tss.trace_id, tss.span_id, tss.extend);
+                       }
+                       tss.counter = 0;
+                       tss.trace_id = currentThreadContext -> getTraceId();
+                       tss.span_id = currentThreadContext -> getSpanId();
+                       tss.extend = currentThreadContext -> getExtend();
+                   }
                 }
+
 
                 u64 new_thread_cpu_time = enabled ? OS::threadCpuTime(thread_id) : 0;
                 if (new_thread_cpu_time != 0 && new_thread_cpu_time - tss.last_cpu_time <= RUNNABLE_THRESHOLD_NS) {

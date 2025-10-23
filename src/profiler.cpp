@@ -618,9 +618,9 @@ u64 Profiler::recordSample(void* ucontext, u64 counter, EventType event_type, Ev
     int tid = fastThreadId();
     ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
     if (threadContext != nullptr) {
-        event->trace_id = threadContext->trace_id;
-        event->span_id = threadContext->span_id;
-        event->extend = threadContext->extend;
+        event->trace_id = threadContext->getTraceId();
+        event->span_id = threadContext->getSpanId();
+        event->extend = threadContext->getExtend();
     } else {
         event->trace_id = 0;
         event->span_id = 0;

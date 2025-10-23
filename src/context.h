@@ -9,10 +9,21 @@
 #include <iostream>
 
 struct ThreadContext {
-    int64_t trace_id;
-    int64_t span_id;
-    int64_t extend;
-
+private:
+    int64_t trace_id = 0;
+    int64_t span_id = 0;
+    int64_t extend = 0;
+public:
+    // Getter 方法
+    int64_t getTraceId() const {
+        return __atomic_load_n(&trace_id, __ATOMIC_ACQUIRE);
+    }
+    int64_t getSpanId()  const {
+        return __atomic_load_n(&span_id, __ATOMIC_ACQUIRE);
+    }
+    int64_t getExtend()  const {
+        return __atomic_load_n(&extend, __ATOMIC_ACQUIRE);
+    }
 };
 
 struct ContextPage {
@@ -22,16 +33,48 @@ struct ContextPage {
 class Context {
 public:
     static Context& getInstance();
-    unsigned int maxPages() const;
-    ContextPage* getPage(int tid);
-    ThreadContext* getThreadContext(int tid);
 
+    /**
+     *  获取最大页数
+     * @return
+     */
+    unsigned int maxPages() const;
+    /**
+     *  获取指定tid的页
+     * @return
+     */
+    ContextPage *getPage(int tid) const;
+    /**
+     *  获取指定tid的页 如果不存在 则创建并返回
+     * @return
+     */
+    ContextPage* getPageOrCreate(int tid) const;
+
+    /**
+     *  获取指定tid的线程对象
+     * @param tid
+     * @return
+     */
+    ThreadContext *getThreadContext(int tid) const;
+
+    /**
+     *  折构函数 释放内存
+     */
+    ~Context() {
+        for (unsigned int i = 0; i < _maxPages; ++i) {
+            delete _pages[i];
+        }
+        delete[] _pages;
+    }
 
 private:
+
     Context();
+
     static unsigned int pages(int tid);
 
-    std::vector<ContextPage*> _pages;
+    ContextPage**_pages;
+
     unsigned int _maxPages;
 };
 
