@@ -10,10 +10,11 @@
 
 struct ThreadContext {
 private:
-    int64_t trace_id = 0;
-    int64_t span_id = 0;
-    int64_t extend = 0;
+    int64_t trace_id;
+    int64_t span_id;
+    int64_t extend;
 public:
+    ThreadContext() : trace_id(0), span_id(0), extend(0) {}
     // Getter 方法
     int64_t getTraceId() const {
         return __atomic_load_n(&trace_id, __ATOMIC_ACQUIRE);

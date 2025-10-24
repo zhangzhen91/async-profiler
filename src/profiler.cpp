@@ -35,7 +35,7 @@
 #include "symbols.h"
 #include "tsc.h"
 #include "vmStructs.h"
-
+#include "context.h"
 
 // The instance is not deleted on purpose, since profiler structures
 // can be still accessed concurrently during VM termination
@@ -617,7 +617,7 @@ u64 Profiler::recordSample(void* ucontext, u64 counter, EventType event_type, Ev
 
     int tid = fastThreadId();
     ThreadContext *threadContext = Context::getInstance().getThreadContext(tid);
-    if (threadContext != nullptr) {
+    if (threadContext != NULL) {
         event->trace_id = threadContext->getTraceId();
         event->span_id = threadContext->getSpanId();
         event->extend = threadContext->getExtend();

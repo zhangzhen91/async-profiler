@@ -16,7 +16,7 @@ Context::Context() {
     _pages = new ContextPage *[_maxPages];
     // 初始化为 nullptr
     for (unsigned int i = 0; i < _maxPages; ++i) {
-        _pages[i] = nullptr;
+        _pages[i] = NULL;
     }
 }
 
@@ -30,8 +30,8 @@ unsigned int Context::maxPages() const {
 
 ThreadContext *Context::getThreadContext(const int tid) const {
     ContextPage *contextPage = getPage(tid);
-    if (contextPage == nullptr) {
-        return nullptr;
+    if (contextPage == NULL) {
+        return NULL;
     }
     return &contextPage->slots[tid % 1024];
 }
@@ -39,15 +39,15 @@ ThreadContext *Context::getThreadContext(const int tid) const {
 ContextPage *Context::getPageOrCreate(const int tid) const {
     const unsigned int pageIndex = pages(tid);
     if (pageIndex >= this->_maxPages) {
-        return nullptr;
+        return NULL;
     }
     // 第一次尝试获取已存在的页面
     ContextPage *contextPage = __atomic_load_n(&this->_pages[pageIndex], __ATOMIC_ACQUIRE);
-    if (contextPage != nullptr) {
+    if (contextPage != NULL) {
         return contextPage;
     }
-    auto *newPage = new ContextPage();
-    ContextPage *expected = nullptr;
+    ContextPage *newPage = new ContextPage();
+    ContextPage *expected = NULL;
     if (__atomic_compare_exchange_n(&this->_pages[pageIndex], &expected, newPage,
                                     false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
         return newPage;
@@ -59,19 +59,33 @@ ContextPage *Context::getPageOrCreate(const int tid) const {
 ContextPage *Context::getPage(const int tid) const {
     const unsigned int pageIndex = pages(tid);
     if (pageIndex >= this->_maxPages) {
-        return nullptr;
+        return NULL;
     }
     return __atomic_load_n(&this->_pages[pageIndex], __ATOMIC_ACQUIRE);;
 }
 
-// int main(){
-//     // 调用 Contexts::getPage 获取页的起始地址
-//     for (int i = 0; i < 6544320; ++i) {
-//         ContextPage* pageAddress = Context::getInstance().getPage(i+1024);
-//         if (!pageAddress) {
-//             std::cout << "Info: This is a log message" << std::endl;
-//             return 0; // 如果获取失败，返回 null
-//         }
-//     }
-//     return 0;
-// }
+int main(){
+    const int max_tid = OS::getMaxThreadId();
+    auto start = std::chrono::high_resolution_clock::now();
+    // 调用 Contexts::getPage 获取页的起始地址
+    int64_t trace_id = 0;
+    int64_t span_id = 0;
+    int64_t extend = 0;
+
+    for (int i = 0; i < 200000; ++i) {
+        const ThreadContext *threadContext = Context::getInstance().getThreadContext(i);
+        if (threadContext == nullptr) {
+            continue;
+        }
+        trace_id = threadContext->getTraceId();
+        span_id = threadContext->getSpanId();
+        extend = threadContext->getExtend();
+    }
+    std::cout << trace_id << std::endl;
+    std::cout << span_id << std::endl;
+    std::cout << extend << std::endl;
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "执行时间: " << duration.count() << " ms" << std::endl;
+    return 0;
+}

@@ -221,7 +221,7 @@ void WallClock::timerLoop() {
                 ThreadSleepState& tss = thread_sleep_state[thread_id];
                 // 查看前span是否结束。结束替换并上报重置
                 ThreadContext *currentThreadContext = Context::getInstance().getThreadContext(thread_id);
-                if (currentThreadContext != nullptr) {
+                if (currentThreadContext != NULL) {
                    if (tss.trace_id != currentThreadContext->getTraceId() || tss.span_id != currentThreadContext->getSpanId()) {
                        if (tss.counter != 0) {
                           recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter, thread_id, tss.call_trace_id, tss.trace_id, tss.span_id, tss.extend);
