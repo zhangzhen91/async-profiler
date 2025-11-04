@@ -138,7 +138,7 @@ JNICALL Java_one_profiler_AsyncProfiler_getTid0
 extern "C" DLLEXPORT jlong JNICALL
 Java_one_profiler_AsyncProfiler_getContextPageOffset0
         (JNIEnv *, jclass, jint tid){
-    return reinterpret_cast<jlong>(Context::getInstance().getPage(tid));
+    return reinterpret_cast<jlong>(Context::getInstance().getPageOrCreate(tid));
 }
 
 extern "C" DLLEXPORT jobject JNICALL
