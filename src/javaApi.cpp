@@ -146,7 +146,7 @@ Java_one_profiler_AsyncProfiler_getContextPage0
   (JNIEnv* env, jclass, jint tid){
 
     // 调用 Contexts::getPage 获取页的起始地址
-    ContextPage* pageAddress = Context::getInstance().getPage(tid);
+    ContextPage* pageAddress = Context::getInstance().getPageOrCreate(tid);
     if (!pageAddress) {
         return nullptr; // 如果获取失败，返回 null
     }
