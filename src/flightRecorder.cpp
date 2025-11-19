@@ -589,8 +589,8 @@ class Recording {
         _start_ticks = _stop_ticks;
         _base_id = 0;
         _bytes_written = 0;
-        off_t pos = OS::truncateFile(_fd);
-        _chunk_start = pos >= 0 ? pos : 0;
+        OS::truncateFile(_fd);
+        _chunk_start = 0;
         writeHeader(_buf);
         writeMetadata(_buf);
         writeRecordingInfo(_buf);
