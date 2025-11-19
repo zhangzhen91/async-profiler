@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.jd.jr.sgm</groupId>
     <artifactId>async-profiler</artifactId>
-    <version>4.0.2-SNAPSHOT</version>
+    <version>4.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>async-profiler</name>
