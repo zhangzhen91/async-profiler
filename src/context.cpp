@@ -24,7 +24,7 @@ unsigned int Context::pages(int tid) {
     return (unsigned int) (tid + 1023) >> 10;
 }
 
-unsigned int Context::maxPages() {
+unsigned int Context::maxPages() const {
     return this->_maxPages;
 }
 

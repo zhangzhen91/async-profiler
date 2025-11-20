@@ -30,9 +30,3 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/cache/apt /var/lib/apt/lists/*
 
 COPY --from=0 /usr/local/musl /usr/local/musl
-
-  docker run -it --rm \
-        -v $(pwd):/workspace \
-        -w /workspace \
-        async-profiler-builder:amd64 \
-        /bin/bash
