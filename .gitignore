@@ -8,3 +8,5 @@
 *.iml
 /src/api/**/*.class
 .gdb_history
+.DS_Store
+
