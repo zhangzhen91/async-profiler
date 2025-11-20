@@ -583,14 +583,20 @@ class Recording {
 
     void switchChunk(int fd) {
 
-        finishChunk();
+        _chunk_start = finishChunk();
         OS::copyFile(_fd, fd, 0, lseek(_fd, 0, SEEK_END));
         _start_time = _stop_time;
         _start_ticks = _stop_ticks;
-        _base_id = 0;
         _bytes_written = 0;
-        OS::truncateFile(_fd);
-        _chunk_start = 0;
+        int truncateFileResult = OS::truncateFile(_fd);
+        if (truncateFileResult == 0) {
+          // 成功truncate
+            _chunk_start = 0;
+            _base_id = 0;
+        } else {
+            _base_id += 0x1000000;
+        }
+
         writeHeader(_buf);
         writeMetadata(_buf);
         writeRecordingInfo(_buf);
