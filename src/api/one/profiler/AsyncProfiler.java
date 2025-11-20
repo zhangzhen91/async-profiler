@@ -117,7 +117,7 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
             this.contextStorage[pageIndex] = contextPage = byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
         }
 
-        return contextPage;
+        return var3;
     }
 
     private long getPageUnsafe(int tid) {
