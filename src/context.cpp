@@ -64,6 +64,16 @@ ContextPage *Context::getPage(const int tid) const {
     return __atomic_load_n(&this->_pages[pageIndex], __ATOMIC_ACQUIRE);;
 }
 
+size_t Context::usedMemory() const {
+    size_t bytes = _maxPages * sizeof(ContextPage*);
+    for (unsigned int i = 0; i < _maxPages; ++i) {
+        if (_pages[i] != NULL) {
+            bytes += sizeof(ContextPage);
+        }
+    }
+    return bytes;
+}
+
 // int main(){
 //     ContextPage* pageAddress = Context::getInstance().getPageOrCreate(0x7fffffff);
 //     if (!pageAddress) {

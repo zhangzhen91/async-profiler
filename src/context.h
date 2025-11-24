@@ -40,6 +40,7 @@ public:
      * @return
      */
     unsigned int maxPages() const;
+    size_t usedMemory() const;
     /**
      *  获取指定tid的页
      * @return
