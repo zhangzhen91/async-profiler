@@ -214,6 +214,7 @@ Java_one_profiler_AsyncProfiler_dump0
     const char* fileName_str = env->GetStringUTFChars(fileName, NULL);
     Profiler* profiler = Profiler::instance();
     profiler->dump(fileName_str);
+    env->ReleaseStringUTFChars(fileName, fileName_str);
 }
 
 
