@@ -1464,20 +1464,18 @@ void Profiler::printUsedMemory(Writer& out) {
         code_cache += _native_libs[i]->usedMemory();
     }
     code_cache += native_lib_count * sizeof(CodeCache);
-
     char buf[1024];
     const size_t KB = 1024;
+    size_t total = (call_trace_storage + flight_recording + dictionaries + context_memory + code_cache) / KB;
     snprintf(buf, sizeof(buf) - 1,
-             "Call trace storage: %7zu KB\n"
-             "  Flight recording: %7zu KB\n"
-             "      Dictionaries: %7zu KB\n"
-             "           Context: %7zu KB\n"
-             "        Code cache: %7zu KB\n"
-             "------------------------------\n"
-             "             Total: %7zu KB\n",
-             call_trace_storage / KB, flight_recording / KB, dictionaries / KB, context_memory / KB,
-             code_cache / KB,
-             (call_trace_storage + flight_recording + dictionaries + context_memory + code_cache) / KB);
+        "{\"call_trace_storage\":%zu,\"flight_recording\":%zu,\"dictionaries\":%zu,\"context\":%zu,\"code_cache\":%zu,\"total\":%zu}",
+        call_trace_storage / KB,
+        flight_recording / KB,
+        dictionaries / KB,
+        context_memory / KB,
+        code_cache / KB,
+        total
+    );
     out << buf;
 }
 
