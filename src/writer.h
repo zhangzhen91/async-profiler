@@ -90,12 +90,35 @@ class BufferWriter : public Writer {
         return _size;
     }
 
+    size_t capacity() const {
+        return _capacity;
+    }
+
     const char* data() const {
         return _buf;
     }
 
     void clear() {
         _size = 0;
+    }
+
+    bool reserve(size_t new_capacity) {
+        if (new_capacity <= _capacity) {
+            return true;
+        }
+        
+        char* new_buf = static_cast<char*>(realloc(_buf, new_capacity));
+        if (new_buf == nullptr) {
+            return false;
+        }
+        
+        _buf = new_buf;
+        _capacity = new_capacity;
+        return true;
+    }
+
+    bool empty() const {
+        return _size == 0;
     }
 
     virtual void write(const char* data, size_t len);
