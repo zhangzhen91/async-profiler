@@ -22,9 +22,19 @@ class Writer {
     Writer& operator<<(const char* s);
     Writer& operator<<(int n);
     Writer& operator<<(long n);
+    Writer& operator<<(unsigned int n);
+    Writer& operator<<(unsigned long n);
+    Writer& operator<<(long long n);
+    Writer& operator<<(unsigned long long n);
+    Writer& operator<<(float f);
+    Writer& operator<<(double d);
 
     bool good() const {
         return _err == 0;
+    }
+
+    int error() const {
+        return _err;
     }
 
     virtual void write(const char* data, size_t len) = 0;
@@ -78,6 +88,14 @@ class BufferWriter : public Writer {
 
     size_t size() const {
         return _size;
+    }
+
+    const char* data() const {
+        return _buf;
+    }
+
+    void clear() {
+        _size = 0;
     }
 
     virtual void write(const char* data, size_t len);
