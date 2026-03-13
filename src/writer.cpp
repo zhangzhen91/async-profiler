@@ -128,7 +128,7 @@ FileWriter::FileWriter(int fd) : _fd(fd), _buf(nullptr), _size(0) {
     }
 }
 
-FileWriter::~FileWriter() {
+FileWriter::~FileWriter() noexcept {
     if (_buf != nullptr) {
         flush(_buf, _size);
         free(_buf);
@@ -161,18 +161,18 @@ void FileWriter::write(const char* data, size_t len) {
     if (data == nullptr || len == 0 || _fd < 0) {
         return;
     }
-    
+
     // Fast path: data fits in buffer
     if (_size + len <= BUF_SIZE) {
         memcpy(_buf + _size, data, len);
         _size += len;
         return;
     }
-    
+
     // Slow path: need to flush buffer first
     flush(_buf, _size);
     _size = 0;
-    
+
     // If data is larger than buffer, write directly
     if (len > BUF_SIZE) {
         flush(data, len);
@@ -180,6 +180,11 @@ void FileWriter::write(const char* data, size_t len) {
         memcpy(_buf, data, len);
         _size = len;
     }
+}
+
+void FileWriter::flush() {
+    flush(_buf, _size);
+    _size = 0;
 }
 
 BufferWriter::BufferWriter(size_t capacity) : _size(0), _capacity(capacity) {
@@ -196,7 +201,7 @@ BufferWriter::BufferWriter(size_t capacity) : _size(0), _capacity(capacity) {
     }
 }
 
-BufferWriter::~BufferWriter() {
+BufferWriter::~BufferWriter() noexcept {
     if (_buf != nullptr) {
         free(_buf);
     }

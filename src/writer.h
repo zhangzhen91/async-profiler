@@ -10,6 +10,7 @@
 #include "log.h"
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 // Forward declarations
 class FileWriter;
@@ -32,7 +33,7 @@ class Writer {
     // Delete copy constructor and assignment operator
     Writer(const Writer&) = delete;
     Writer& operator=(const Writer&) = delete;
-    
+
     // Allow move constructor and assignment operator
     Writer(Writer&&) = default;
     Writer& operator=(Writer&&) = default;
@@ -57,7 +58,7 @@ class Writer {
 
     // Core writing interface
     virtual void write(const char* data, size_t len) = 0;
-    
+
     // Convenience methods
     virtual void flush() {}  // Default no-op implementation
 };
@@ -75,38 +76,25 @@ class FileWriter : public Writer {
     static constexpr size_t BUF_SIZE = 8192;
 
     void flush(const char* data, size_t len);
-    void flush_buffer();
 
   public:
     explicit FileWriter(const char* file_name);
     explicit FileWriter(int fd);
     ~FileWriter() noexcept;
 
-    // Disable copy operations
+    // Disable copy/move operations (resource owner)
     FileWriter(const FileWriter&) = delete;
     FileWriter& operator=(const FileWriter&) = delete;
-    
-    // Enable move operations
-    FileWriter(FileWriter&& other) noexcept;
-    FileWriter& operator=(FileWriter&& other) noexcept;
+    FileWriter(FileWriter&&) = delete;
+    FileWriter& operator=(FileWriter&&) = delete;
 
     bool is_open() const noexcept { return _fd >= 0; }
     int fd() const noexcept { return _fd; }
-    
+
     // Override flush to actually flush the buffer
     void flush() override;
-    
-    virtual void write(const char* data, size_t len) override;
-};
 
-class LogWriter : public Writer {
-    LogLevel _logLevel;
-
-  public:
-    LogWriter(LogLevel logLevel = LOG_INFO) : _logLevel(logLevel) {
-    }
-
-    virtual void write(const char* data, size_t len);
+    void write(const char* data, size_t len) override;
 };
 
 /**
@@ -123,13 +111,11 @@ class BufferWriter : public Writer {
     explicit BufferWriter(size_t capacity = 256);
     ~BufferWriter() noexcept;
 
-    // Disable copy operations
+    // Disable copy/move operations (resource owner)
     BufferWriter(const BufferWriter&) = delete;
     BufferWriter& operator=(const BufferWriter&) = delete;
-    
-    // Enable move operations
-    BufferWriter(BufferWriter&& other) noexcept;
-    BufferWriter& operator=(BufferWriter&& other) noexcept;
+    BufferWriter(BufferWriter&&) = delete;
+    BufferWriter& operator=(BufferWriter&&) = delete;
 
     // Buffer access
     const char* data() const noexcept { return _buf; }
@@ -137,24 +123,18 @@ class BufferWriter : public Writer {
     size_t size() const noexcept { return _size; }
     size_t capacity() const noexcept { return _capacity; }
     bool empty() const noexcept { return _size == 0; }
-    
+
     // Buffer management
     void clear() noexcept { _size = 0; }
-    bool reserve(size_t new_capacity);
-    bool resize(size_t new_size);
-    
+
     // String operations
-    std::string str() const { return std::string(_buf, _size); }
-    void assign(const char* data, size_t len);
-    
-    // Memory efficiency
-    void shrink_to_fit();
-    
+    std::string str() const { return _buf == nullptr ? std::string() : std::string(_buf, _size); }
+
     // Compatibility methods
     [[deprecated("Use data() instead")]]
     char* buf() const { return _buf; }
-    
-    virtual void write(const char* data, size_t len) override;
+
+    void write(const char* data, size_t len) override;
 };
 
 /**
@@ -166,11 +146,11 @@ class LogWriter : public Writer {
 
   public:
     explicit LogWriter(LogLevel logLevel = LOG_INFO) : _logLevel(logLevel) {}
-    
+
     void set_log_level(LogLevel level) noexcept { _logLevel = level; }
     LogLevel get_log_level() const noexcept { return _logLevel; }
 
-    virtual void write(const char* data, size_t len) override;
+    void write(const char* data, size_t len) override;
 };
 
 /**
@@ -182,19 +162,19 @@ class CallbackWriter : public Writer {
 
   public:
     explicit CallbackWriter(asprof_writer_t output_callback) : _output_callback(output_callback) {}
-    
+
     // Disable copy operations
     CallbackWriter(const CallbackWriter&) = delete;
     CallbackWriter& operator=(const CallbackWriter&) = delete;
-    
+
     // Enable move operations
-    CallbackWriter(CallbackWriter&& other) noexcept;
-    CallbackWriter& operator=(CallbackWriter&& other) noexcept;
-    
+    CallbackWriter(CallbackWriter&&) = default;
+    CallbackWriter& operator=(CallbackWriter&&) = default;
+
     void set_callback(asprof_writer_t callback) noexcept { _output_callback = callback; }
     asprof_writer_t get_callback() const noexcept { return _output_callback; }
 
-    virtual void write(const char* data, size_t len) override;
+    void write(const char* data, size_t len) override;
 };
 
 // Utility functions for common writing patterns
@@ -205,7 +185,7 @@ namespace WriterUtils {
      */
     template<typename... Args>
     bool writef(Writer& writer, const char* format, Args... args);
-    
+
     /**
      * Write a line of text followed by a newline character.
      */
@@ -216,7 +196,7 @@ namespace WriterUtils {
         }
         return false;
     }
-    
+
     /**
      * Write a formatted line of text.
      */
