@@ -121,27 +121,33 @@ class ThreadCpuTimeBuffer {
      * @param thread_sleep_state Map to update with drained CPU time information
      */
     void drain(ThreadSleepMap& thread_sleep_state) {
-        u64 read_limit = _read_ptr + RINGBUF_SIZE;
-        do {
-            ThreadCpuTime& t = _ringbuf[_read_ptr & (RINGBUF_SIZE - 1)];
+        u32 read_ptr = _read_ptr;
+        const u32 read_limit = read_ptr + RINGBUF_SIZE;
+
+        while (read_ptr < read_limit) {
+            ThreadCpuTime& t = _ringbuf[read_ptr & (RINGBUF_SIZE - 1)];
             u64 cpu_time = loadAcquire(t.cpu_time);
-            
+
             // Exit if no more data available
-            if (cpu_time == 0) {
+            if (likely(cpu_time == 0)) {
                 break;
             }
 
             u64 trace = t.trace;
-            // Atomically consume the entry using compare-and-swap
-            if (__sync_bool_compare_and_swap(&t.cpu_time, cpu_time, 0)) {
+            // Atomically consume the entry with weaker memory ordering than seq_cst CAS
+            u64 expected = cpu_time;
+            if (__atomic_compare_exchange_n(&t.cpu_time, &expected, 0, false,
+                                            __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
                 int thread_id = trace >> 32;
                 ThreadSleepState& tss = thread_sleep_state[thread_id];
                 tss.last_cpu_time = cpu_time;
                 tss.call_trace_id = (u32)trace;
                 tss.counter = 0;
-                _read_ptr++;
+                read_ptr++;
             }
-        } while (_read_ptr < read_limit);
+        }
+
+        _read_ptr = read_ptr;
     }
 };
 
