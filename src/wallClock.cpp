@@ -202,27 +202,31 @@ ThreadState WallClock::getThreadState(void* ucontext) {
  * @param ucontext User context containing CPU registers
  */
 void WallClock::signalHandler(int signo, siginfo_t* siginfo, void* ucontext) {
+    const Mode mode = _mode;
+    const u64 start_time = TSC::ticks();
+    Profiler* profiler = Profiler::instance();
+
     // Handle based on profiling mode
-    if (_mode == WALL_BATCH) {
+    if (mode == WALL_BATCH) {
         // Batch mode: record detailed wall clock information including thread state
         WallClockEvent event;
-        event._start_time = TSC::ticks();  // High-resolution timestamp
-        event._thread_state = getThreadState(ucontext);  // Determine thread state
-        event._samples = 1;  // Single sample
-        
+        event._start_time = start_time;
+        event._thread_state = getThreadState(ucontext);
+        event._samples = 1;
+
         // Record the sample and get encoded thread/trace information
-        u64 trace = Profiler::instance()->recordSample(ucontext, _interval, WALL_CLOCK_SAMPLE, &event);
-        
+        u64 trace = profiler->recordSample(ucontext, _interval, WALL_CLOCK_SAMPLE, &event);
+
         // If thread is sleeping, add CPU time info to buffer for batch processing
-        if (event._thread_state == THREAD_SLEEPING && trace != 0) {
+        if (trace != 0 && event._thread_state == THREAD_SLEEPING) {
             _thread_cpu_time_buf.add(trace);
         }
     } else {
-        // Legacy mode: record execution sample
-        ExecutionEvent event(TSC::ticks());
+        // Legacy/CPU mode: record execution sample
+        ExecutionEvent event(start_time);
         // For CPU-only mode, don't determine thread state to reduce overhead
-        event._thread_state = _mode == CPU_ONLY ? THREAD_UNKNOWN : getThreadState(ucontext);
-        Profiler::instance()->recordSample(ucontext, _interval, EXECUTION_SAMPLE, &event);
+        event._thread_state = mode == CPU_ONLY ? THREAD_UNKNOWN : getThreadState(ucontext);
+        profiler->recordSample(ucontext, _interval, EXECUTION_SAMPLE, &event);
     }
 }
 
@@ -250,10 +254,12 @@ void WallClock::recordWallClock(u64 start_time, ThreadState state, u32 samples, 
     event.trace_id = trace_id;         // Distributed trace ID
     event.span_id = span_id;           // Distributed span ID
     event.extend = extend;             // Extended trace information
-    
+
     // Record the batched samples with total duration
-    Profiler::instance()->recordExternalSamples(samples, samples * _interval, tid,
-                                               call_trace_id, WALL_CLOCK_SAMPLE, &event);
+    const u64 duration = (u64)samples * (u64)_interval;
+    Profiler* profiler = Profiler::instance();
+    profiler->recordExternalSamples(samples, duration, tid,
+                                    call_trace_id, WALL_CLOCK_SAMPLE, &event);
 }
 
 /**
