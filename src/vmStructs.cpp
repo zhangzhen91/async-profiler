@@ -287,67 +287,74 @@ void VMStructs::initOffsets() {
             };
             
             // Process standard field mappings
-            for (const auto& mapping : mappings) {
-                if (mapping.type == nullptr) continue;
-                
-                if (strcmp(type, mapping.type) == 0) {
-                    if (mapping.field == nullptr) {
-                        if (strcmp(type, "PermGen") == 0) {
-                            _has_perm_gen = true;
-                        }
-                        continue;
+            const char type0 = type[0];
+            const char field0 = field[0];
+
+            for (const FieldMapping& mapping : mappings) {
+                if (mapping.type == nullptr || mapping.type[0] != type0 || strcmp(type, mapping.type) != 0) {
+                    continue;
+                }
+
+                if (mapping.field == nullptr) {
+                    if (type0 == 'P' && strcmp(type, "PermGen") == 0) {
+                        _has_perm_gen = true;
                     }
-                    
-                    if (strcmp(field, mapping.field) == 0) {
-                        if (mapping.is_address) {
-                            // Handle address fields
-                            if (strcmp(type, "Universe") == 0 || strcmp(type, "CompressedKlassPointers") == 0) {
-                                if (strcmp(field, "_narrow_klass._base") == 0 || strcmp(field, "_base") == 0) {
-                                    _narrow_klass_base_addr = *(char***)(entry + address_offset);
-                                } else if (strcmp(field, "_narrow_klass._shift") == 0 || strcmp(field, "_shift") == 0) {
-                                    _narrow_klass_shift_addr = *(int**)(entry + address_offset);
-                                } else if (strcmp(field, "_collectedHeap") == 0) {
-                                    _collected_heap_addr = *(char***)(entry + address_offset);
-                                }
-                            } else if (strcmp(type, "CodeCache") == 0) {
-                                if (strcmp(field, "_heap") == 0 || strcmp(field, "_heaps") == 0) {
-                                    _code_heap_addr = *(char***)(entry + address_offset);
-                                } else if (strcmp(field, "_low_bound") == 0) {
-                                    _code_heap_low_addr = *(const void***)(entry + address_offset);
-                                } else if (strcmp(field, "_high_bound") == 0) {
-                                    _code_heap_high_addr = *(const void***)(entry + address_offset);
-                                }
-                            } else if (strcmp(type, "java_lang_Class") == 0) {
-                                if (strcmp(field, "_klass_offset") == 0) {
-                                    _klass_offset_addr = *(int**)(entry + address_offset);
-                                }
-                            } else if (strcmp(type, "StubRoutines") == 0) {
-                                if (strcmp(field, "_call_stub_return_address") == 0) {
-                                    _call_stub_return_addr = *(const void***)(entry + address_offset);
-                                }
-                            } else if (strcmp(type, "Flag") == 0) {
-                                if (strcmp(field, "flags") == 0) {
-                                    _flags_addr = **(char***)(entry + address_offset);
-                                } else if (strcmp(field, "numFlags") == 0) {
-                                    _flag_count = **(int**)(entry + address_offset);
-                                }
-                            }
-                        } else if (mapping.target_offset != nullptr) {
-                            // Handle offset fields
-                            int value = safeLoadInt(entry + offset_offset);
-                            
-                            // Special handling for negative offsets
-                            if (strcmp(field, "_verified_entry_point") == 0 ||
-                                strcmp(field, "_code_begin") == 0 ||
-                                strcmp(field, "_scopes_data_begin") == 0) {
-                                *mapping.target_offset = -value;
-                            } else {
-                                *mapping.target_offset = value;
-                            }
+                    continue;
+                }
+
+                if (mapping.field[0] != field0 || strcmp(field, mapping.field) != 0) {
+                    continue;
+                }
+
+                if (mapping.is_address) {
+                    // Handle address fields
+                    if (strcmp(type, "Universe") == 0 || strcmp(type, "CompressedKlassPointers") == 0) {
+                        if (strcmp(field, "_narrow_klass._base") == 0 || strcmp(field, "_base") == 0) {
+                            _narrow_klass_base_addr = *(char***)(entry + address_offset);
+                        } else if (strcmp(field, "_narrow_klass._shift") == 0 || strcmp(field, "_shift") == 0) {
+                            _narrow_klass_shift_addr = *(int**)(entry + address_offset);
+                        } else if (strcmp(field, "_collectedHeap") == 0) {
+                            _collected_heap_addr = *(char***)(entry + address_offset);
                         }
-                        break; // Found match, move to next entry
+                    } else if (strcmp(type, "CodeCache") == 0) {
+                        if (strcmp(field, "_heap") == 0 || strcmp(field, "_heaps") == 0) {
+                            _code_heap_addr = *(char***)(entry + address_offset);
+                        } else if (strcmp(field, "_low_bound") == 0) {
+                            _code_heap_low_addr = *(const void***)(entry + address_offset);
+                        } else if (strcmp(field, "_high_bound") == 0) {
+                            _code_heap_high_addr = *(const void***)(entry + address_offset);
+                        }
+                    } else if (strcmp(type, "java_lang_Class") == 0) {
+                        if (strcmp(field, "_klass_offset") == 0) {
+                            _klass_offset_addr = *(int**)(entry + address_offset);
+                        }
+                    } else if (strcmp(type, "StubRoutines") == 0) {
+                        if (strcmp(field, "_call_stub_return_address") == 0) {
+                            _call_stub_return_addr = *(const void***)(entry + address_offset);
+                        }
+                    } else if (strcmp(type, "Flag") == 0) {
+                        if (strcmp(field, "flags") == 0) {
+                            _flags_addr = **(char***)(entry + address_offset);
+                        } else if (strcmp(field, "numFlags") == 0) {
+                            _flag_count = **(int**)(entry + address_offset);
+                        }
+                    }
+                } else if (mapping.target_offset != nullptr) {
+                    // Handle offset fields
+                    int value = safeLoadInt(entry + offset_offset);
+
+                    // Special handling for negative offsets
+                    if (field0 == '_' &&
+                        (strcmp(field, "_verified_entry_point") == 0 ||
+                         strcmp(field, "_code_begin") == 0 ||
+                         strcmp(field, "_scopes_data_begin") == 0)) {
+                        *mapping.target_offset = -value;
+                    } else {
+                        *mapping.target_offset = value;
                     }
                 }
+
+                break; // Found match, move to next entry
             }
         }
     }
