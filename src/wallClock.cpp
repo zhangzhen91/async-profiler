@@ -168,27 +168,27 @@ WallClock::Mode WallClock::_mode;
  */
 ThreadState WallClock::getThreadState(void* ucontext) {
     StackFrame frame(ucontext);
-    const uintptr_t pc = frame.pc();
+    instruction_t* pc = (instruction_t*)frame.pc();
 
-    // Fast path: Check if current PC points to a syscall instruction
-    // This is the most common case for sleeping threads
-    if (StackFrame::isSyscall((instruction_t*)pc)) {
+    // Fast path: current PC points to syscall instruction
+    if (StackFrame::isSyscall(pc)) {
         return THREAD_SLEEPING;
     }
 
-    // Check if the previous instruction was a syscall that was interrupted
-    // This handles cases where the syscall has just completed with EINTR
-    const uintptr_t prev_pc = pc - SYSCALL_SIZE;
-    
-    // Ensure the previous instruction address is within a valid page and readable
-    const bool prev_pc_valid = (pc & 0xfff) >= SYSCALL_SIZE ||
-                              Profiler::instance()->findLibraryByAddress((instruction_t*)prev_pc) != NULL;
-    
-    if (prev_pc_valid && StackFrame::isSyscall((instruction_t*)prev_pc) && frame.checkInterruptedSyscall()) {
+    // Check if previous instruction was a syscall interrupted with EINTR.
+    // Most of the time prev_pc is in the same page; avoid library lookup on this hot path.
+    const uintptr_t prev_pc = (uintptr_t)pc - SYSCALL_SIZE;
+    instruction_t* prev_insn = (instruction_t*)prev_pc;
+
+    if (likely((((uintptr_t)pc & 0xfff) >= SYSCALL_SIZE))) {
+        if (StackFrame::isSyscall(prev_insn) && frame.checkInterruptedSyscall()) {
+            return THREAD_SLEEPING;
+        }
+    } else if (Profiler::instance()->findLibraryByAddress(prev_insn) != NULL &&
+               StackFrame::isSyscall(prev_insn) && frame.checkInterruptedSyscall()) {
         return THREAD_SLEEPING;
     }
 
-    // Thread is executing user code
     return THREAD_RUNNING;
 }
 
