@@ -332,11 +332,15 @@ void WallClock::stop() {
 void WallClock::timerLoop() {
     // Get current thread ID to exclude it from sampling
     const int self = OS::threadId();
-    
+
     // Get thread filter for selective profiling
     ThreadFilter* thread_filter = Profiler::instance()->threadFilter();
     const bool thread_filter_enabled = thread_filter->enabled();
     const Mode mode = _mode;
+    const bool cpu_only_mode = mode == CPU_ONLY;
+    const bool wall_batch_mode = mode == WALL_BATCH;
+    const u64 interval = (u64)_interval;
+    Context& context = Context::getInstance();
 
     // Initialize thread state tracking
     ThreadSleepMap thread_sleep_state;
@@ -351,44 +355,46 @@ void WallClock::timerLoop() {
         // Sample threads for this iteration
         for (int signaled_threads = 0; signaled_threads < THREADS_PER_TICK && thread_list->hasNext(); ) {
             int thread_id = thread_list->next();
-            
+
             // Skip invalid thread IDs and self
-            if (thread_id == self || thread_id <= 0) {
+            if (unlikely(thread_id <= 0 || thread_id == self)) {
                 // On macOS, task_threads() may sporadically return 0 or -1 among thread IDs
                 continue;
             }
-            
+
             // Apply thread filter if enabled
             if (thread_filter_enabled && !thread_filter->accept(thread_id)) {
                 continue;
             }
 
             // Handle based on profiling mode
-            if (mode == CPU_ONLY) {
+            if (cpu_only_mode) {
                 // CPU-only mode: skip sleeping threads
                 if (!enabled || OS::threadState(thread_id) == THREAD_SLEEPING) {
                     continue;
                 }
-            } else if (mode == WALL_BATCH) {
+            } else if (wall_batch_mode) {
                 // Batch mode: track idle thread batches
                 ThreadSleepState& tss = thread_sleep_state[thread_id];
-                
+
                 // Check for trace/span changes for distributed tracing
-                ThreadContext* currentThreadContext = Context::getInstance().getThreadContext(thread_id);
-                if (currentThreadContext != NULL) {
+                ThreadContext* current_thread_context = context.getThreadContext(thread_id);
+                if (current_thread_context != NULL) {
+                    u64 trace_id = current_thread_context->getTraceId();
+                    u64 span_id = current_thread_context->getSpanId();
+
                     // If trace/span has changed, flush any pending idle samples
-                    if (tss.trace_id != currentThreadContext->getTraceId() ||
-                        tss.span_id != currentThreadContext->getSpanId()) {
+                    if (tss.trace_id != trace_id || tss.span_id != span_id) {
                         if (tss.counter != 0) {
                             recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter,
-                                          thread_id, tss.call_trace_id, tss.trace_id,
-                                          tss.span_id, tss.extend);
+                                            thread_id, tss.call_trace_id, tss.trace_id,
+                                            tss.span_id, tss.extend);
                         }
                         // Reset tracking for new trace/span
                         tss.counter = 0;
-                        tss.trace_id = currentThreadContext->getTraceId();
-                        tss.span_id = currentThreadContext->getSpanId();
-                        tss.extend = currentThreadContext->getExtend();
+                        tss.trace_id = trace_id;
+                        tss.span_id = span_id;
+                        tss.extend = current_thread_context->getExtend();
                     }
                 }
 
@@ -397,20 +403,21 @@ void WallClock::timerLoop() {
                 if (new_thread_cpu_time != 0 &&
                     new_thread_cpu_time - tss.last_cpu_time <= RUNNABLE_THRESHOLD_NS) {
                     // Thread is still idle, increment counter
-                    if (++tss.counter < MAX_IDLE_BATCH) {
-                        if (tss.counter == 1) {
+                    u32 counter = ++tss.counter;
+                    if (counter < MAX_IDLE_BATCH) {
+                        if (counter == 1) {
                             // First idle sample, record start time
                             tss.start_time = TSC::ticks();
                         }
                         continue;  // Skip signaling this idle thread
                     }
                 }
-                
+
                 // Thread is no longer idle or batch limit reached, flush samples
                 if (tss.counter != 0) {
                     recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter,
-                                  thread_id, tss.call_trace_id, tss.trace_id,
-                                  tss.span_id, tss.extend);
+                                    thread_id, tss.call_trace_id, tss.trace_id,
+                                    tss.span_id, tss.extend);
                     tss.counter = 0;
                 }
             }
@@ -427,22 +434,25 @@ void WallClock::timerLoop() {
             // Still processing threads in current cycle
             // Distribute sleep time evenly across threads to maintain consistent interval
             long long sleep_time = cycle_start_time +
-                                 (u64)_interval * thread_list->index() / thread_list->count() -
-                                 current_time;
-            OS::uninterruptibleSleep(sleep_time < MIN_INTERVAL ? MIN_INTERVAL : sleep_time, &_running);
+                                   interval * thread_list->index() / thread_list->count() -
+                                   current_time;
+            if (sleep_time < MIN_INTERVAL) {
+                sleep_time = MIN_INTERVAL;
+            }
+            OS::uninterruptibleSleep(sleep_time, &_running);
         } else {
             // Completed current cycle, prepare for next cycle
-            cycle_start_time += (u64)_interval;
+            cycle_start_time += interval;
             long long sleep_time = cycle_start_time - current_time;
-            
+
             // Ensure minimum sleep time to prevent busy waiting
             if (sleep_time < MIN_INTERVAL) {
                 cycle_start_time = current_time + MIN_INTERVAL;
                 sleep_time = MIN_INTERVAL;
             }
-            
+
             OS::uninterruptibleSleep(sleep_time, &_running);
-            
+
             // Update thread list for next cycle
             thread_list->update();
         }
@@ -460,8 +470,8 @@ void WallClock::timerLoop() {
         const ThreadSleepState& tss = it->second;
         if (tss.counter != 0) {
             recordWallClock(tss.start_time, THREAD_SLEEPING, tss.counter,
-                          it->first, tss.call_trace_id, tss.trace_id,
-                          tss.span_id, tss.extend);
+                            it->first, tss.call_trace_id, tss.trace_id,
+                            tss.span_id, tss.extend);
         }
     }
 }
