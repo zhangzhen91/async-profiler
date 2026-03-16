@@ -134,18 +134,20 @@ class VMStructs {
     static void initTLS(void* vm_thread);
     static void initThreadBridge();
 
-    const char* at(int offset) {
+    const char* at(int offset) const {
         return (const char*)this + offset;
     }
 
     static bool goodPtr(const void* ptr) {
-        return (uintptr_t)ptr >= 0x1000 && ((uintptr_t)ptr & (sizeof(uintptr_t) - 1)) == 0;
+        const uintptr_t p = (uintptr_t)ptr;
+        return p >= 0x1000 && (p & (sizeof(uintptr_t) - 1)) == 0;
     }
 
     template<typename T>
     static T align(const void* ptr) {
         static_assert(std::is_pointer<T>::value, "T must be a pointer type");
-        return (T)((uintptr_t)ptr & ~(sizeof(T) - 1));
+        const uintptr_t p = (uintptr_t)ptr;
+        return (T)(p & ~(uintptr_t)(sizeof(uintptr_t) - 1));
     }
 
   public:
