@@ -270,31 +270,32 @@ void WallClock::recordWallClock(u64 start_time, ThreadState state, u32 samples, 
  */
 Error WallClock::start(Arguments& args) {
     // Determine profiling mode based on arguments
-    if (args._wall >= 0 || strcmp(args._event, EVENT_WALL) == 0) {
-        // Wall clock profiling requested
-        _mode = args._nobatch ? WALL_LEGACY : WALL_BATCH;
-    } else {
-        // CPU-only profiling mode
-        _mode = CPU_ONLY;
-    }
+    const bool wall_requested = args._wall >= 0 || strcmp(args._event, EVENT_WALL) == 0;
+    _mode = wall_requested ? (args._nobatch ? WALL_LEGACY : WALL_BATCH) : CPU_ONLY;
 
     // Set sampling interval
-    _interval = args._wall >= 0 ? args._wall : args._interval;
-    if (_interval == 0) {
+    long interval = args._wall >= 0 ? args._wall : args._interval;
+    if (interval == 0) {
         // Use default interval based on mode
         // Increase default for wall clock mode due to larger number of sampled threads
-        _interval = _mode == CPU_ONLY ? DEFAULT_INTERVAL : DEFAULT_INTERVAL * 5;
+        interval = _mode == CPU_ONLY ? DEFAULT_INTERVAL : DEFAULT_INTERVAL * 5;
     }
 
     // Validate interval is not too small to avoid excessive overhead
-    if (_interval < MIN_INTERVAL) {
-        _interval = MIN_INTERVAL;
+    if (interval < MIN_INTERVAL) {
+        interval = MIN_INTERVAL;
     }
+    _interval = interval;
 
     // Set up signal for thread sampling
-    _signal = args._signal == 0 ? OS::getProfilingSignal(1)
-                                : ((args._signal >> 8) > 0 ? args._signal >> 8 : args._signal);
-    
+    const int signal = args._signal;
+    if (signal == 0) {
+        _signal = OS::getProfilingSignal(1);
+    } else {
+        int shifted = signal >> 8;
+        _signal = shifted > 0 ? shifted : signal;
+    }
+
     // Install signal handler
     OS::installSignalHandler(_signal, signalHandler);
 

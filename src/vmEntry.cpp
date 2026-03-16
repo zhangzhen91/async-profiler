@@ -490,25 +490,29 @@ Agent_OnAttach(JavaVM* vm, char* options, void* reserved) {
     Error error = args.parse(options);
 
     Log::open(args);
+    const bool temporary_log = args.hasTemporaryLog();
 
     if (error) {
         Log::error("%s", error.message());
+        if (temporary_log) Log::close();
         return ARGUMENTS_ERROR;
     }
 
     if (!VM::init(vm, true)) {
         Log::error("JVM does not support Tool Interface");
+        if (temporary_log) Log::close();
         return COMMAND_ERROR;
     }
 
-    error = Profiler::instance()->run(args);
+    Profiler* profiler = Profiler::instance();
+    error = profiler->run(args);
     if (error) {
         Log::error("%s", error.message());
-        if (args.hasTemporaryLog()) Log::close();
+        if (temporary_log) Log::close();
         return COMMAND_ERROR;
     }
 
-    if (args._action == ACTION_STOP && args.hasTemporaryLog()) {
+    if (args._action == ACTION_STOP && temporary_log) {
         // The launcher immediately deletes logs after printing
         Log::close();
     }
