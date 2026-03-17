@@ -38,10 +38,23 @@ Writer& Writer::operator<<(const char* s) {
 
 Writer& Writer::operator<<(int n) {
     char buf[16];
-    int len = safe_snprintf(buf, "%d", n);
-    if (len > 0) {
-        write(buf, len);
+    char* p = buf + sizeof(buf);
+
+    unsigned int u = (unsigned int)n;
+    if (n < 0) {
+        u = 0u - u;
     }
+
+    do {
+        *--p = (char)('0' + (u % 10));
+        u /= 10;
+    } while (u != 0);
+
+    if (n < 0) {
+        *--p = '-';
+    }
+
+    write(p, (buf + sizeof(buf)) - p);
     return *this;
 }
 

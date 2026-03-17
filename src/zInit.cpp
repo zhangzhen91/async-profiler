@@ -63,22 +63,25 @@ class LateInitializer {
 
         const char* jvm_lib_name = OS::isLinux() ? "libjvm.so" : "libjvm.dylib";
         CodeCache* libjvm = profiler->findLibraryByName(jvm_lib_name);
-        
-        if (libjvm != nullptr && libjvm->findSymbol("AsyncGetCallTrace") != nullptr) {
-            VMStructs::init(libjvm);
-            
-            // heap is already created => this is dynamic attach
-            if (CollectedHeap::created()) {
-                JVMFlag* flag = JVMFlag::find("EnableDynamicAgentLoading");
-                if (flag != nullptr && flag->isDefault()) {
-                    flag->setCmdline();
-                }
-            }
-            
-            return true;
+        if (libjvm == nullptr) {
+            return false;
         }
 
-        return false;
+        if (libjvm->findSymbol("AsyncGetCallTrace") == nullptr) {
+            return false;
+        }
+
+        VMStructs::init(libjvm);
+
+        // heap is already created => this is dynamic attach
+        if (CollectedHeap::created()) {
+            JVMFlag* flag = JVMFlag::find("EnableDynamicAgentLoading");
+            if (flag != nullptr && flag->isDefault()) {
+                flag->setCmdline();
+            }
+        }
+
+        return true;
     }
 
     void startProfiler(const char* command) {
