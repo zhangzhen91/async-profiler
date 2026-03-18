@@ -70,7 +70,8 @@ int StackWalker::walkFP(void* ucontext, const void** callchain, int max_depth, S
     const void* pc;
     uintptr_t fp;
     uintptr_t sp;
-    uintptr_t bottom = (uintptr_t)&sp + MAX_WALK_SIZE;
+    const uintptr_t bottom = (uintptr_t)&sp + MAX_WALK_SIZE;
+    const uintptr_t max_frame_size = MAX_FRAME_SIZE;
 
     StackFrame frame(ucontext);
     if (ucontext == NULL) {
@@ -84,31 +85,39 @@ int StackWalker::walkFP(void* ucontext, const void** callchain, int max_depth, S
     }
 
     int depth = 0;
+    const void** const callchain_end = callchain + max_depth;
 
     // Walk until the bottom of the stack or until the first Java frame
-    while (depth < max_depth) {
-        if (CodeHeap::contains(pc) && !(depth == 0 && frame.unwindAtomicStub(pc))) {
-            java_ctx->set(pc, sp, fp);
+    while (callchain < callchain_end) {
+        // Check for Java frame first (most likely to break early)
+        if (CodeHeap::contains(pc)) {
+            if (depth == 0 && frame.unwindAtomicStub(pc)) {
+                // Skip atomic stub for first frame
+            } else {
+                java_ctx->set(pc, sp, fp);
+                break;
+            }
+        }
+
+        *callchain++ = pc;
+        depth++;
+
+        // Use likely/unlikely hints for better branch prediction
+        // Check frame pointer validity in order of likelihood
+        if (unlikely(fp < sp) ||
+            unlikely(fp >= sp + max_frame_size) ||
+            unlikely(fp >= bottom) ||
+            unlikely(!aligned(fp))) {
             break;
         }
 
-        callchain[depth++] = pc;
-
-        // Check if the next frame is below on the current stack
-        if (fp < sp || fp >= sp + MAX_FRAME_SIZE || fp >= bottom) {
+        // Load next frame information
+        const void* next_pc = stripPointer(SafeAccess::load((void**)fp + FRAME_PC_SLOT));
+        if (unlikely(inDeadZone(next_pc))) {
             break;
         }
 
-        // Frame pointer must be word aligned
-        if (!aligned(fp)) {
-            break;
-        }
-
-        pc = stripPointer(SafeAccess::load((void**)fp + FRAME_PC_SLOT));
-        if (inDeadZone(pc)) {
-            break;
-        }
-
+        pc = next_pc;
         sp = fp + (FRAME_PC_SLOT + 1) * sizeof(void*);
         fp = *(uintptr_t*)fp;
     }
@@ -120,7 +129,9 @@ int StackWalker::walkDwarf(void* ucontext, const void** callchain, int max_depth
     const void* pc;
     uintptr_t fp;
     uintptr_t sp;
-    uintptr_t bottom = (uintptr_t)&sp + MAX_WALK_SIZE;
+    const uintptr_t bottom = (uintptr_t)&sp + MAX_WALK_SIZE;
+    const uintptr_t max_frame_size = MAX_FRAME_SIZE;
+    const uintptr_t frame_pc_slot_offset = (FRAME_PC_SLOT + 1) * sizeof(void*);
 
     StackFrame frame(ucontext);
     if (ucontext == NULL) {
@@ -134,72 +145,91 @@ int StackWalker::walkDwarf(void* ucontext, const void** callchain, int max_depth
     }
 
     int depth = 0;
+    const void** const callchain_end = callchain + max_depth;
     Profiler* profiler = Profiler::instance();
 
     // Walk until the bottom of the stack or until the first Java frame
-    while (depth < max_depth) {
-        if (CodeHeap::contains(pc) && !(depth == 0 && frame.unwindAtomicStub(pc))) {
-            // Don't dereference pc as it may point to unreadable memory
-            // frame.adjustSP(page_start, pc, sp);
-            java_ctx->set(pc, sp, fp);
-            break;
+    while (callchain < callchain_end) {
+        // Check for Java frame first (most likely to break early)
+        if (CodeHeap::contains(pc)) {
+            if (depth == 0 && frame.unwindAtomicStub(pc)) {
+                // Skip atomic stub for first frame
+            } else {
+                java_ctx->set(pc, sp, fp);
+                break;
+            }
         }
 
-        callchain[depth++] = pc;
+        *callchain++ = pc;
+        depth++;
 
-        uintptr_t prev_sp = sp;
+        // Cache previous values for comparison
+        const void* prev_pc = pc;
+        const uintptr_t prev_sp = sp;
+
+        // Find frame description - use local variable to avoid repeated pointer chasing
         CodeCache* cc = profiler->findLibraryByAddress(pc);
         FrameDesc* f = cc != NULL ? cc->findFrameDesc(pc) : &FrameDesc::default_frame;
 
+        // Calculate new stack pointer based on CFA (Canonical Frame Address)
         u8 cfa_reg = (u8)f->cfa;
         int cfa_off = f->cfa >> 8;
-        if (cfa_reg == DW_REG_SP) {
-            sp = sp + cfa_off;
-        } else if (cfa_reg == DW_REG_FP) {
-            sp = fp + cfa_off;
-        } else if (cfa_reg == DW_REG_PLT) {
-            sp += ((uintptr_t)pc & 15) >= 11 ? cfa_off * 2 : cfa_off;
-        } else {
-            break;
+        
+        // Use switch for better branch prediction
+        switch (cfa_reg) {
+            case DW_REG_SP:
+                sp = sp + cfa_off;
+                break;
+            case DW_REG_FP:
+                sp = fp + cfa_off;
+                break;
+            case DW_REG_PLT:
+                sp += ((uintptr_t)pc & 15) >= 11 ? cfa_off * 2 : cfa_off;
+                break;
+            default:
+                return depth;  // Invalid CFA register
         }
 
-        // Check if the next frame is below on the current stack
-        if (sp < prev_sp || sp >= prev_sp + MAX_FRAME_SIZE || sp >= bottom) {
-            break;
+        // Validate new stack pointer
+        if (unlikely(sp < prev_sp) ||
+            unlikely(sp >= prev_sp + max_frame_size) ||
+            unlikely(sp >= bottom) ||
+            unlikely(!aligned(sp))) {
+            return depth;
         }
 
-        // Stack pointer must be word aligned
-        if (!aligned(sp)) {
-            break;
-        }
-
-        const void* prev_pc = pc; 
+        // Handle PC offset or normal frame unwinding
         if (f->fp_off & DW_PC_OFFSET) {
-            pc = (const char*)pc + (f->fp_off >> 1);
+            pc = (const char*)prev_pc + (f->fp_off >> 1);
         } else {
-            if (f->fp_off != DW_SAME_FP && f->fp_off < MAX_FRAME_SIZE && f->fp_off > -MAX_FRAME_SIZE) {
+            // Update frame pointer if needed
+            if (likely(f->fp_off != DW_SAME_FP) &&
+                likely(f->fp_off < (int)max_frame_size) &&
+                likely(f->fp_off > -(int)max_frame_size)) {
                 fp = (uintptr_t)SafeAccess::load((void**)(sp + f->fp_off));
             }
 
+            // Update program counter
             if (EMPTY_FRAME_SIZE > 0 || f->pc_off != DW_LINK_REGISTER) {
                 pc = stripPointer(SafeAccess::load((void**)(sp + f->pc_off)));
             } else if (depth == 1) {
                 pc = (const void*)frame.link();
             } else {
-                break;
+                return depth;
             }
 
+            // Special handling for AArch64 default frame
             if (EMPTY_FRAME_SIZE == 0 && cfa_off == 0 && f->fp_off != DW_SAME_FP) {
-                // AArch64 default_frame
                 sp = defaultSenderSP(sp, fp);
-                if (sp < prev_sp || sp >= bottom || !aligned(sp)) {
-                    break;
+                if (unlikely(sp < prev_sp) || unlikely(sp >= bottom) || unlikely(!aligned(sp))) {
+                    return depth;
                 }
             }
         }
 
-        if (inDeadZone(pc) || (pc == prev_pc && sp == prev_sp)) {
-            break;
+        // Check for infinite loops or invalid PC
+        if (unlikely(inDeadZone(pc)) || unlikely(pc == prev_pc && sp == prev_sp)) {
+            return depth;
         }
     }
 
