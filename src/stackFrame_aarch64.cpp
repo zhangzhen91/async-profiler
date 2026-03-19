@@ -80,16 +80,37 @@ static inline bool isSTP(instruction_t insn) {
 
 // Check if this is a well-known leaf stub with a constant size frame
 static inline bool isFixedSizeFrame(const char* name) {
-    // Dispatch by the first character to optimize lookup
+    if (name == nullptr || *name == '\0') {
+        return false;
+    }
+    
+    // Use a more efficient approach with early length checks
     switch (name[0]) {
-        case 'i':
-            return strncmp(name, "indexof_linear_", 15) == 0;
-        case 'm':
-            return strncmp(name, "md5_implCompress", 16) == 0;
-        case 's':
-            return strncmp(name, "sha256_implCompress", 19) == 0
-                || strncmp(name, "string_indexof_linear_", 22) == 0
-                || strncmp(name, "slow_subtype_check", 18) == 0;
+        case 'i': {
+            // Check length first to avoid unnecessary strncmp calls
+            if (name[14] == '_' && name[15] == 'l' && name[16] == 'i') {
+                return strncmp(name, "indexof_linear_", 15) == 0;
+            }
+            return false;
+        }
+        case 'm': {
+            // md5_implCompress has fixed length
+            if (name[15] == 'i' && name[16] == 'm') {
+                return strncmp(name, "md5_implCompress", 16) == 0;
+            }
+            return false;
+        }
+        case 's': {
+            // Check the most common case first
+            if (name[17] == 'i' && name[18] == 'm') {
+                return strncmp(name, "sha256_implCompress", 19) == 0;
+            } else if (name[21] == 'i' && name[22] == 'n') {
+                return strncmp(name, "string_indexof_linear_", 22) == 0;
+            } else if (name[17] == 't' && name[18] == 'y') {
+                return strncmp(name, "slow_subtype_check", 18) == 0;
+            }
+            return false;
+        }
         default:
             return false;
     }
@@ -97,46 +118,100 @@ static inline bool isFixedSizeFrame(const char* name) {
 
 // Check if this is a well-known leaf stub that does not change stack pointer
 static inline bool isZeroSizeFrame(const char* name) {
-    // Dispatch by the first character to optimize lookup
+    if (name == nullptr || *name == '\0') {
+        return false;
+    }
+    
+    // Use length-aware dispatch with character position checks to reduce strncmp calls
     switch (name[0]) {
-        case 'I':
-            return strcmp(name, "InlineCacheBuffer") == 0;
-        case 'S':
-            return strncmp(name, "SafeFetch", 9) == 0;
-        case 'a':
-            return strncmp(name, "atomic", 6) == 0;
-        case 'b':
-            return strncmp(name, "bigInteger", 10) == 0
-                || strcmp(name, "base64_encodeBlock") == 0;
-        case 'c':
-            return strncmp(name, "copy_", 5) == 0
-                || strncmp(name, "compare_long_string_", 20) == 0;
-        case 'e':
-            return strcmp(name, "encodeBlock") == 0;
-        case 'f':
-            return strcmp(name, "f2hf") == 0;
-        case 'g':
-            return strcmp(name, "ghash_processBlocks") == 0;
-        case 'h':
-            return strcmp(name, "hf2f") == 0;
-        case 'i':
-            return strncmp(name, "itable", 6) == 0;
-        case 'l':
-            return strcmp(name, "large_byte_array_inflate") == 0
-                || strncmp(name, "lookup_secondary_supers_", 24) == 0;
-        case 'm':
-            return strncmp(name, "md5_implCompress", 16) == 0;
-        case 's':
-            return strncmp(name, "sha1_implCompress", 17) == 0
-                || strncmp(name, "compare_long_string_same_encoding", 33) == 0
-                || strcmp(name, "compare_long_string_LL") == 0
-                || strcmp(name, "compare_long_string_UU") == 0;
-        case 'u':
-            return strcmp(name, "updateBytesAdler32") == 0;
-        case 'v':
-            return strncmp(name, "vtable", 6) == 0;
-        case 'z':
-            return strncmp(name, "zero_", 5) == 0;
+        case 'I': {
+            // InlineCacheBuffer - exact match
+            return name[14] == 'f' && name[15] == 'f' && name[16] == 'e' && strcmp(name, "InlineCacheBuffer") == 0;
+        }
+        case 'S': {
+            // SafeFetch - prefix match
+            return name[8] == 't' && strncmp(name, "SafeFetch", 9) == 0;
+        }
+        case 'a': {
+            // atomic - prefix match
+            return name[5] == 'c' && strncmp(name, "atomic", 6) == 0;
+        }
+        case 'b': {
+            // Check the most common case first
+            if (name[9] == 'r' && name[10] == 'I') {
+                return strncmp(name, "bigInteger", 10) == 0;
+            } else if (name[16] == 'k') {
+                return strcmp(name, "base64_encodeBlock") == 0;
+            }
+            return false;
+        }
+        case 'c': {
+            // Check length first to optimize
+            if (name[4] == '_' && name[5] == '\0') {
+                return strncmp(name, "copy_", 5) == 0;
+            } else if (name[19] == 'g' && name[20] == '_') {
+                return strncmp(name, "compare_long_string_", 20) == 0;
+            }
+            return false;
+        }
+        case 'e': {
+            // encodeBlock - exact match
+            return name[10] == 'k' && strcmp(name, "encodeBlock") == 0;
+        }
+        case 'f': {
+            // f2hf - exact match
+            return name[3] == 'f' && strcmp(name, "f2hf") == 0;
+        }
+        case 'g': {
+            // ghash_processBlocks - exact match
+            return name[20] == 'k' && strcmp(name, "ghash_processBlocks") == 0;
+        }
+        case 'h': {
+            // hf2f - exact match
+            return name[3] == 'f' && strcmp(name, "hf2f") == 0;
+        }
+        case 'i': {
+            // itable - prefix match
+            return name[5] == 'l' && strncmp(name, "itable", 6) == 0;
+        }
+        case 'l': {
+            // Check the most common case first
+            if (name[23] == 'e' && name[24] == '_') {
+                return strcmp(name, "large_byte_array_inflate") == 0;
+            } else if (name[23] == 's' && name[24] == '_') {
+                return strncmp(name, "lookup_secondary_supers_", 24) == 0;
+            }
+            return false;
+        }
+        case 'm': {
+            // md5_implCompress - prefix match
+            return name[15] == 'i' && strncmp(name, "md5_implCompress", 16) == 0;
+        }
+        case 's': {
+            // Check the most common cases first
+            if (name[16] == 'i' && name[17] == 'm') {
+                return strncmp(name, "sha1_implCompress", 17) == 0;
+            } else if (name[32] == 'c' && name[33] == 'o') {
+                return strncmp(name, "compare_long_string_same_encoding", 33) == 0;
+            } else if (name[21] == 'L' && name[22] == 'L') {
+                return strcmp(name, "compare_long_string_LL") == 0;
+            } else if (name[21] == 'U' && name[22] == 'U') {
+                return strcmp(name, "compare_long_string_UU") == 0;
+            }
+            return false;
+        }
+        case 'u': {
+            // updateBytesAdler32 - exact match
+            return name[17] == '2' && strcmp(name, "updateBytesAdler32") == 0;
+        }
+        case 'v': {
+            // vtable - prefix match
+            return name[5] == 'l' && strncmp(name, "vtable", 6) == 0;
+        }
+        case 'z': {
+            // zero_ - prefix match
+            return name[4] == '_' && strncmp(name, "zero_", 5) == 0;
+        }
         default:
             return false;
     }
