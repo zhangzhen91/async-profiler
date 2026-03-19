@@ -67,14 +67,37 @@ void StackFrame::ret() {
 
 bool StackFrame::unwindStub(instruction_t* entry, const char* name, uintptr_t& pc, uintptr_t& sp, uintptr_t& fp) {
     instruction_t* ip = (instruction_t*)pc;
-    if (ip == entry || *ip == 0xe12fff1e
-        || strncmp(name, "itable", 6) == 0
-        || strncmp(name, "vtable", 6) == 0
-        || strcmp(name, "InlineCacheBuffer") == 0)
-    {
+    
+    // Fast path checks - most common cases first
+    if (ip == entry || *ip == 0xe12fff1e) {
         pc = link();
         return true;
     }
+    
+    // Name-based checks - optimize string comparisons
+    if (name != nullptr && *name != '\0') {
+        switch (name[0]) {
+            case 'i':
+                if (name[5] == 'l' && strncmp(name, "itable", 6) == 0) {
+                    pc = link();
+                    return true;
+                }
+                break;
+            case 'v':
+                if (name[5] == 'l' && strncmp(name, "vtable", 6) == 0) {
+                    pc = link();
+                    return true;
+                }
+                break;
+            case 'I':
+                if (name[16] == 'f' && name[17] == 'f' && strcmp(name, "InlineCacheBuffer") == 0) {
+                    pc = link();
+                    return true;
+                }
+                break;
+        }
+    }
+    
     return false;
 }
 
