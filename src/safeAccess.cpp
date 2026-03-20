@@ -108,19 +108,27 @@ int32_t SafeAccess::load32(int32_t* ptr, int32_t default_value) {
 // this function skips the fault instruction pretending it has loaded default_value
 bool SafeAccess::checkFault(StackFrame& frame) {
     instruction_t* pc = (instruction_t*)frame.pc();
-    if (!(pc >= (void*)load && pc < load_end) &&
-        !(pc >= (void*)load32 && pc < load32_end)) {
+    
+    // Fast path: check if PC is within either function range
+    bool in_load_range = (pc >= (void*)load && pc < load_end);
+    bool in_load32_range = (pc >= (void*)load32 && pc < load32_end);
+    
+    if (!in_load_range && !in_load32_range) {
         return false;
     }
 
 #if defined(__x86_64__)
+    // Optimize instruction length calculation
     // 2 bytes: mov eax, [reg] OR 3 bytes: mov rax, [reg]
-    frame.pc() += pc[0] == 0x8b ? 2 : 3;
+    // Check the opcode byte to determine instruction length
+    const uint8_t opcode = *(uint8_t*)pc;
+    frame.pc() += (opcode == 0x8b) ? 2 : 3;
     frame.retval() = frame.arg1();
 #elif defined(__i386__)
-    // eax already holds default_value
+    // Fixed instruction length for i386
     frame.pc() += 2;
 #else
+    // Generic case for other architectures
     frame.pc() += sizeof(instruction_t);
     frame.retval() = frame.arg1();
 #endif
