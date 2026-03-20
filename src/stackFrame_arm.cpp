@@ -104,15 +104,31 @@ bool StackFrame::unwindStub(instruction_t* entry, const char* name, uintptr_t& p
 bool StackFrame::unwindCompiled(NMethod* nm, uintptr_t& pc, uintptr_t& sp, uintptr_t& fp) {
     instruction_t* ip = (instruction_t*)pc;
     instruction_t* entry = (instruction_t*)nm->entry();
-    if (ip > entry && ip <= entry + 4 && (*ip & 0xffffff00) == 0xe24dd000) {
-        //    push  {r11, lr}
-        //    mov   r11, sp (optional)
-        // -> sub   sp, sp, #offs
-        fp = ((uintptr_t*)sp)[0];
-        pc = ((uintptr_t*)sp)[1];
-        sp += 8;
+    
+    // Fast path: check if we're in the entry range
+    if (ip <= entry) {
+        pc = link();
         return true;
-    } else if (*ip == 0xe8bd4800) {
+    }
+    
+    // Check for common patterns with optimized bit operations
+    const instruction_t insn = *ip;
+    
+    // Pattern 1: sub sp, sp, #offs (0xe24dd000 mask)
+    if ((insn & 0xffffff00) == 0xe24dd000) {
+        // Only check range if we're close to entry (common case optimization)
+        if (ip <= entry + 4) {
+            //    push  {r11, lr}
+            //    mov   r11, sp (optional)
+            // -> sub   sp, sp, #offs
+            fp = ((uintptr_t*)sp)[0];
+            pc = ((uintptr_t*)sp)[1];
+            sp += 8;
+            return true;
+        }
+    }
+    // Pattern 2: pop {r11, lr} (0xe8bd4800)
+    else if (insn == 0xe8bd4800) {
         //    add   sp, sp, #offs
         // -> pop   {r11, lr}
         fp = ((uintptr_t*)sp)[0];
@@ -120,6 +136,8 @@ bool StackFrame::unwindCompiled(NMethod* nm, uintptr_t& pc, uintptr_t& sp, uintp
         sp += 8;
         return true;
     }
+    
+    // Default fallback
     pc = link();
     return true;
 }
