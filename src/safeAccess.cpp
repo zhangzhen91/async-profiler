@@ -24,16 +24,38 @@ extern instruction_t load32_end[];
 
 NOINLINE
 void* SafeAccess::load(void** ptr, void* default_value) {
+    // Early check for null pointer to avoid unnecessary operations
+    if (ptr == nullptr) {
+        return default_value;
+    }
+    
 #if defined(__x86_64__)
     void* ret;
-    asm volatile("mov (%1), %0" : "=a"(ret) : "r"(ptr), "S"(default_value));
+    // Use volatile to prevent compiler optimizations and ensure memory access
+    asm volatile(
+        "mov (%1), %0"
+        : "=a"(ret)  // Output: ret in %rax
+        : "r"(ptr), "S"(default_value)  // Inputs: ptr in any register, default_value in %rsi
+        : "memory"  // Clobber memory to prevent unwanted optimizations
+    );
 #elif defined(__i386__)
     void* ret;
-    asm volatile("mov (%1), %0" : "=a"(ret) : "r"(ptr), "a"(default_value));
+    asm volatile(
+        "mov (%1), %0"
+        : "=a"(ret)  // Output: ret in %eax
+        : "r"(ptr), "a"(default_value)  // Inputs: ptr in any register, default_value in %eax
+        : "memory"  // Clobber memory to prevent unwanted optimizations
+    );
 #elif defined(__aarch64__)
     register void* ret asm("x0");
-    asm volatile("ldr %0, [%1]" : "=r"(ret) : "r"(ptr), "r"(default_value));
+    asm volatile(
+        "ldr %0, [%1]"
+        : "=r"(ret)  // Output: ret in register
+        : "r"(ptr), "r"(default_value)  // Inputs: ptr and default_value in registers
+        : "memory"  // Clobber memory to prevent unwanted optimizations
+    );
 #else
+    // Fallback for other architectures
     asm volatile("" : : "r"(default_value));  // prevent compiler from optimizing the argument away
     void* ret = *ptr;
 #endif
@@ -43,16 +65,38 @@ void* SafeAccess::load(void** ptr, void* default_value) {
 
 NOINLINE
 int32_t SafeAccess::load32(int32_t* ptr, int32_t default_value) {
+    // Early check for null pointer to avoid unnecessary operations
+    if (ptr == nullptr) {
+        return default_value;
+    }
+    
 #if defined(__x86_64__)
     int32_t ret;
-    asm volatile("movl (%1), %0" : "=a"(ret) : "r"(ptr), "S"(default_value));
+    // Use volatile to prevent compiler optimizations and ensure memory access
+    asm volatile(
+        "movl (%1), %0"
+        : "=a"(ret)  // Output: ret in %eax
+        : "r"(ptr), "S"(default_value)  // Inputs: ptr in any register, default_value in %rsi
+        : "memory"  // Clobber memory to prevent unwanted optimizations
+    );
 #elif defined(__i386__)
     int32_t ret;
-    asm volatile("movl (%1), %0" : "=a"(ret) : "r"(ptr), "a"(default_value));
+    asm volatile(
+        "movl (%1), %0"
+        : "=a"(ret)  // Output: ret in %eax
+        : "r"(ptr), "a"(default_value)  // Inputs: ptr in any register, default_value in %eax
+        : "memory"  // Clobber memory to prevent unwanted optimizations
+    );
 #elif defined(__aarch64__)
     register int32_t ret asm("w0");
-    asm volatile("ldr %w0, [%1]" : "=r"(ret) : "r"(ptr), "r"(default_value));
+    asm volatile(
+        "ldr %w0, [%1]"
+        : "=r"(ret)  // Output: ret in register
+        : "r"(ptr), "r"(default_value)  // Inputs: ptr and default_value in registers
+        : "memory"  // Clobber memory to prevent unwanted optimizations
+    );
 #else
+    // Fallback for other architectures
     asm volatile("" : : "r"(default_value));  // prevent compiler from optimizing the argument away
     int32_t ret = *ptr;
 #endif
