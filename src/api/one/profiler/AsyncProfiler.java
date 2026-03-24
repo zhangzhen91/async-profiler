@@ -26,6 +26,10 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
     private static final int TRACE_OFFSET = 0;
     private static final int CONTEXT_OFFSET = 8;
     private static final int WALL_TIME_OFFSET = 16;
+    private static final int THREADS_PER_PAGE = 1024;
+    private static final int CONTEXT_ENTRY_SIZE = 24;
+    private static final int TRACE_ID_OFFSET = 0;
+    private static final int SPAN_ID_OFFSET = 8;
     private static final ThreadLocal<Integer> TID;
     private static final String USE_FAST_THREAD_CPU_TIME = "useFastThreadCpuTime";
     private static final String USE_FAST_THREAD_CPU_TIME_ENV = "USE_FAST_THREAD_CPU_TIME";
@@ -48,11 +52,18 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
         return getInstance(null);
     }
 
-    public static synchronized AsyncProfiler getInstance(String libPath) {
-        if (instance != null) {
-            return instance;
+    public static AsyncProfiler getInstance(String libPath) {
+        if (instance == null) {
+            synchronized (AsyncProfiler.class) {
+                if (instance == null) {
+                    instance = createInstance(libPath);
+                }
+            }
         }
+        return instance;
+    }
 
+    private static AsyncProfiler createInstance(String libPath) {
         AsyncProfiler profiler = new AsyncProfiler();
         if (libPath != null) {
             System.load(libPath);
@@ -74,7 +85,6 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
             }
         }
         profiler.initializeContextStorage();
-        instance = profiler;
         return profiler;
     }
 
@@ -88,6 +98,12 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
 
     }
 
+    /**
+     * 设置上下文ID（traceId和spanId）用于分布式追踪
+     *
+     * @param traceId 分布式追踪的trace ID
+     * @param spanId  分布式追踪的span ID
+     */
     public void setContextId(long traceId, long spanId) {
         int tid = TID.get();
         this.setContextByteBuffer(tid, traceId, spanId);
@@ -99,21 +115,22 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
             if (contextPage == null) {
                 return;
             }
-            int baseIndex = tid % 1024 * 24;
-            contextPage.putLong(baseIndex + 0, traceId);
-            contextPage.putLong(baseIndex + 8, spanId);
+            int baseIndex = tid % THREADS_PER_PAGE * CONTEXT_ENTRY_SIZE;
+            contextPage.putLong(baseIndex + TRACE_ID_OFFSET, traceId);
+            contextPage.putLong(baseIndex + SPAN_ID_OFFSET, spanId);
         }
     }
 
     private ByteBuffer getPage(int tid) {
-        int pageIndex = tid / 1024;
+        int pageIndex = tid / THREADS_PER_PAGE;
         ByteBuffer contextPage = this.contextStorage[pageIndex];
         if (contextPage == null) {
             ByteBuffer byteBuffer = getContextPage0(tid);
             if (byteBuffer == null) {
                 return null;
             }
-            this.contextStorage[pageIndex] = contextPage = byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
+            contextPage = byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
+            this.contextStorage[pageIndex] = contextPage;
         }
 
         return contextPage;
@@ -130,40 +147,26 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
 
     private static File extractEmbeddedLib() {
         String resourceName = "/" + getPlatformTag() + "/libasyncProfiler.so";
-        InputStream in = AsyncProfiler.class.getResourceAsStream(resourceName);
-        if (in == null) {
-            return null;
-        }
+        try (InputStream in = AsyncProfiler.class.getResourceAsStream(resourceName)) {
+            if (in == null) {
+                return null;
+            }
 
-        try {
             String extractPath = System.getProperty("one.profiler.extractPath");
             File file = File.createTempFile("libasyncProfiler-", ".so",
                     extractPath == null || extractPath.isEmpty() ? null : new File(extractPath));
-            FileOutputStream out = null;
-            try {
-                out = new FileOutputStream(file);
-                byte[] buf = new byte[32000];
+            
+            try (FileOutputStream out = new FileOutputStream(file)) {
+                byte[] buf = new byte[8192]; // 使用更小的缓冲区
                 int bytes;
                 while ((bytes = in.read(buf)) >= 0) {
                     out.write(buf, 0, bytes);
                 }
-            } finally {
-                if (out != null) {
-                    try {
-                        out.close();
-                    } catch (IOException ignore) {
-                    }
-                }
             }
+            
             return file;
         } catch (IOException e) {
             throw new IllegalStateException(e);
-        } finally {
-            try {
-                in.close();
-            } catch (IOException e) {
-                // ignore
-            }
         }
     }
 
@@ -197,8 +200,11 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
      */
     @Override
     public void start(String event, long interval) throws IllegalStateException {
-        if (event == null) {
-            throw new NullPointerException();
+        if (event == null || event.trim().isEmpty()) {
+            throw new IllegalArgumentException("Event cannot be null or empty");
+        }
+        if (interval <= 0) {
+            throw new IllegalArgumentException("Interval must be positive");
         }
         start0(event, interval, true);
     }
@@ -213,8 +219,11 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
      */
     @Override
     public void resume(String event, long interval) throws IllegalStateException {
-        if (event == null) {
-            throw new NullPointerException();
+        if (event == null || event.trim().isEmpty()) {
+            throw new IllegalArgumentException("Event cannot be null or empty");
+        }
+        if (interval <= 0) {
+            throw new IllegalArgumentException("Interval must be positive");
         }
         start0(event, interval, false);
     }
@@ -262,8 +271,8 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
      */
     @Override
     public String execute(String command) throws IllegalArgumentException, IllegalStateException, IOException {
-        if (command == null) {
-            throw new NullPointerException();
+        if (command == null || command.trim().isEmpty()) {
+            throw new IllegalArgumentException("Command cannot be null or empty");
         }
         return execute0(command);
     }
@@ -340,6 +349,20 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
     }
 
     /**
+     * Add multiple threads to the set of profiled threads.
+     * 'filter' option must be enabled to use this method.
+     *
+     * @param threads Threads to include in profiling
+     */
+    public void addThreads(java.util.Collection<Thread> threads) {
+        if (threads != null) {
+            for (Thread thread : threads) {
+                addThread(thread);
+            }
+        }
+    }
+
+    /**
      * Remove the given thread from the set of profiled threads.
      * 'filter' option must be enabled to use this method.
      *
@@ -349,7 +372,24 @@ public class AsyncProfiler implements AsyncProfilerMXBean {
         filterThread(thread, false);
     }
 
+    /**
+     * Remove multiple threads from the set of profiled threads.
+     * 'filter' option must be enabled to use this method.
+     *
+     * @param threads Threads to exclude from profiling
+     */
+    public void removeThreads(java.util.Collection<Thread> threads) {
+        if (threads != null) {
+            for (Thread thread : threads) {
+                removeThread(thread);
+            }
+        }
+    }
+
     public void dump(String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()) {
+            throw new IllegalArgumentException("File name cannot be null or empty");
+        }
         dump0(fileName);
     }
 
