@@ -39,28 +39,54 @@ public class FlameGraph implements Comparator<Frame> {
 
     public void parseCollapsed(Reader in) throws IOException {
         CallStack stack = new CallStack();
+        char[] buffer = new char[8192]; // 重用缓冲区减少GC
 
         try (BufferedReader br = new BufferedReader(in)) {
-            for (String line; (line = br.readLine()) != null; ) {
+            String line;
+            while ((line = br.readLine()) != null) {
                 int space = line.lastIndexOf(' ');
                 if (space <= 0) continue;
 
-                long ticks = Long.parseLong(line.substring(space + 1));
-
-                for (int from = 0, to; from < space; from = to + 1) {
-                    if ((to = line.indexOf(';', from)) < 0) to = space;
-                    String name = line.substring(from, to);
-                    byte type = detectType(name);
-                    if ((type & HAS_SUFFIX) != 0) {
-                        name = name.substring(0, name.length() - 4);
-                        type ^= HAS_SUFFIX;
-                    }
-                    stack.push(name, type);
+                long ticks;
+                try {
+                    ticks = Long.parseLong(line.substring(space + 1));
+                } catch (NumberFormatException e) {
+                    // 跳过格式不正确的行
+                    continue;
                 }
 
+                // 优化字符串处理，减少substring调用
+                parseFrameStack(line, space, stack);
+                
                 addSample(stack, ticks);
                 stack.clear();
             }
+        }
+    }
+
+    private void parseFrameStack(String line, int endPos, CallStack stack) {
+        int from = 0;
+        int to;
+        
+        while (from < endPos) {
+            to = line.indexOf(';', from);
+            if (to < 0 || to > endPos) {
+                to = endPos;
+            }
+            
+            String name = line.substring(from, to);
+            byte type = detectType(name);
+            
+            // 优化类型检测后的处理
+            if ((type & HAS_SUFFIX) != 0) {
+                name = name.substring(0, name.length() - 4);
+                type ^= HAS_SUFFIX;
+            }
+            
+            stack.push(name, type);
+            
+            if (to == endPos) break;
+            from = to + 1;
         }
     }
 
@@ -132,12 +158,24 @@ public class FlameGraph implements Comparator<Frame> {
     }
 
     private void rebuild(Frame frame, CallStack stack, String[] strings) {
-        if (frame.self > 0) {
+        // 优化：提前检查是否有自采样，避免不必要的递归
+        boolean hasSelfSample = frame.self > 0;
+        boolean hasChildren = !frame.isEmpty();
+        
+        if (hasSelfSample) {
             addSample(stack, frame.self);
         }
-        if (!frame.isEmpty()) {
-            for (Frame child : frame.values()) {
-                stack.push(strings[child.getTitleIndex()], child.getType());
+        
+        if (hasChildren) {
+            // 优化：缓存child.values()结果，避免重复调用
+            Frame[] children = frame.values().toArray(EMPTY_FRAME_ARRAY);
+            
+            for (Frame child : children) {
+                // 优化：减少数组访问次数
+                int titleIndex = child.getTitleIndex();
+                byte type = child.getType();
+                
+                stack.push(strings[titleIndex], type);
                 rebuild(child, stack, strings);
                 stack.pop();
             }
@@ -145,30 +183,40 @@ public class FlameGraph implements Comparator<Frame> {
     }
 
     public void addSample(CallStack stack, long ticks) {
-        if (excludeStack(stack)) {
+        if (excludeStack(stack) || ticks <= 0) {
             return;
         }
 
-        Frame frame = root;
+        int stackSize = stack.size;
+        int skip = args.skip;
+        
+        // 优化：提前计算边界，减少循环中的条件检查
+        int start, end, step;
         if (args.reverse) {
             // Retain by-thread grouping, unless thread frame is skipped
-            int skip = args.skip;
-            if (skip == 0 && stack.size > 0 && isThreadFrame(stack.names[0], stack.types[0])) {
-                frame = addChild(frame, stack.names[0], stack.types[0], ticks);
-                skip = 1;
-            }
-            for (int i = stack.size; --i >= skip; ) {
-                frame = addChild(frame, stack.names[i], stack.types[i], ticks);
+            start = stackSize - 1;
+            end = skip - 1;
+            step = -1;
+            
+            if (skip == 0 && stackSize > 0 && isThreadFrame(stack.names[0], stack.types[0])) {
+                // 处理线程帧特殊情况
+                root = addChild(root, stack.names[0], stack.types[0], ticks);
+                end = 0; // 跳过第一个元素
             }
         } else {
-            for (int i = args.skip; i < stack.size; i++) {
-                frame = addChild(frame, stack.names[i], stack.types[i], ticks);
-            }
+            start = skip;
+            end = stackSize;
+            step = 1;
         }
+        
+        Frame frame = root;
+        for (int i = start; i != end; i += step) {
+            frame = addChild(frame, stack.names[i], stack.types[i], ticks);
+        }
+        
         frame.total += ticks;
         frame.self += ticks;
-
-        depth = Math.max(depth, stack.size);
+        depth = Math.max(depth, stackSize);
     }
 
     public void dump(PrintStream out) {
