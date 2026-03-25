@@ -56,38 +56,64 @@ public abstract class JfrConverter extends Classifier {
     }
 
     protected void collectEvents() throws IOException {
-        Class<? extends Event> eventClass = args.nativemem ? MallocEvent.class
-                : args.live ? LiveObject.class
-                : args.alloc ? AllocationSample.class
-                : args.lock ? ContendedLock.class
-                : args.trace ? MethodTrace.class
-                : ExecutionSample.class;
-
-        BitSet threadStates = null;
+        // 优化：使用Map缓存事件类型选择，避免重复的条件判断
+        Class<? extends Event> eventClass = getEventClass();
+        
+        // 优化：提前准备线程状态过滤器
+        BitSet threadStates = prepareThreadStates();
+        
+        // 优化：预计算时间范围
+        long startTicks = args.from != 0 ? toTicks(args.from) : Long.MIN_VALUE;
+        long endTicks = args.to != 0 ? toTicks(args.to) : Long.MAX_VALUE;
+        
+        // 优化：提前获取ExecutionSample类型判断
+        boolean isExecutionSample = ExecutionSample.class.isAssignableFrom(eventClass);
+        
+        Event event;
+        while ((event = jfr.readEvent(eventClass)) != null) {
+            // 优化：使用短路求值，先检查时间范围再检查线程状态
+            if (event.time < startTicks || event.time > endTicks) {
+                continue;
+            }
+            
+            // 优化：只有当需要检查线程状态时才进行转换和检查
+            if (threadStates != null && isExecutionSample) {
+                ExecutionSample execSample = (ExecutionSample) event;
+                if (!threadStates.get(execSample.threadState)) {
+                    continue;
+                }
+            }
+            
+            collector.collect(event);
+        }
+    }
+    
+    private Class<? extends Event> getEventClass() {
+        if (args.nativemem) return MallocEvent.class;
+        if (args.live) return LiveObject.class;
+        if (args.alloc) return AllocationSample.class;
+        if (args.lock) return ContendedLock.class;
+        if (args.trace) return MethodTrace.class;
+        return ExecutionSample.class;
+    }
+    
+    private BitSet prepareThreadStates() {
         if (args.state != null) {
-            threadStates = new BitSet();
+            BitSet threadStates = new BitSet();
             for (String state : args.state.toUpperCase().split(",")) {
                 threadStates.set(toThreadState(state));
             }
+            return threadStates;
         } else if (args.cpu) {
-            threadStates = getThreadStates(true);
+            return getThreadStates(true);
         } else if (args.wall) {
-            threadStates = getThreadStates(false);
+            return getThreadStates(false);
         } else if (args.cpuTime) {
-            threadStates = new BitSet();
+            BitSet threadStates = new BitSet();
             threadStates.set(ExecutionSample.CPU_TIME_SAMPLE);
+            return threadStates;
         }
-
-        long startTicks = args.from != 0 ? toTicks(args.from) : Long.MIN_VALUE;
-        long endTicks = args.to != 0 ? toTicks(args.to) : Long.MAX_VALUE;
-
-        for (Event event; (event = jfr.readEvent(eventClass)) != null; ) {
-            if (event.time >= startTicks && event.time <= endTicks) {
-                if (threadStates == null || threadStates.get(((ExecutionSample) event).threadState)) {
-                    collector.collect(event);
-                }
-            }
-        }
+        return null;
     }
 
     protected void convertChunk() {
