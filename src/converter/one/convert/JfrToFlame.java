@@ -22,6 +22,7 @@ import static one.convert.Frame.*;
  */
 public class JfrToFlame extends JfrConverter {
     private final FlameGraph fg;
+    private final ThreadLocal<CallStack> stackPool = ThreadLocal.withInitial(CallStack::new);
 
     public JfrToFlame(JfrReader jfr, Arguments args) {
         super(jfr, args);
@@ -30,46 +31,76 @@ public class JfrToFlame extends JfrConverter {
 
     @Override
     protected void convertChunk() {
+        final boolean showThreads = args.threads;
+        final boolean classify = args.classify;
+        final boolean showLines = args.lines;
+        final boolean showBci = args.bci;
+        
         collector.forEach(new AggregatedEventVisitor() {
-            final CallStack stack = new CallStack();
-
             @Override
             public void visit(Event event, long value) {
                 StackTrace stackTrace = jfr.stackTraces.get(event.stackTraceId);
-                if (stackTrace != null) {
-                    Arguments args = JfrToFlame.this.args;
-                    long[] methods = stackTrace.methods;
-                    byte[] types = stackTrace.types;
-                    int[] locations = stackTrace.locations;
+                if (stackTrace == null) {
+                    return;
+                }
 
-                    if (args.threads) {
-                        stack.push(getThreadName(event.tid), TYPE_NATIVE);
-                    }
-                    if (args.classify) {
-                        Classifier.Category category = getCategory(stackTrace);
-                        stack.push(category.title, category.type);
-                    }
-                    for (int i = methods.length; --i >= 0; ) {
-                        String methodName = getMethodName(methods[i], types[i]);
-                        int location;
-                        if (args.lines && (location = locations[i] >>> 16) != 0) {
-                            methodName += ":" + location;
-                        } else if (args.bci && (location = locations[i] & 0xffff) != 0) {
-                            methodName += "@" + location;
-                        }
-                        stack.push(methodName, types[i]);
-                    }
-                    long classId = event.classId();
-                    if (classId != 0) {
-                        stack.push(getClassName(classId), (event instanceof AllocationSample)
-                                && ((AllocationSample) event).tlabSize == 0 ? TYPE_KERNEL : TYPE_INLINED);
-                    }
-
-                    fg.addSample(stack, value);
+                CallStack stack = stackPool.get();
+                try {
+                    processStackTrace(stack, stackTrace, event, value, showThreads, classify, showLines, showBci);
+                } finally {
                     stack.clear();
                 }
             }
         });
+    }
+    
+    private void processStackTrace(CallStack stack, StackTrace stackTrace, Event event, long value,
+                                   boolean showThreads, boolean classify, boolean showLines, boolean showBci) {
+        long[] methods = stackTrace.methods;
+        byte[] types = stackTrace.types;
+        int[] locations = stackTrace.locations;
+
+        // 优化：减少重复的条件检查
+        if (showThreads) {
+            stack.push(getThreadName(event.tid), TYPE_NATIVE);
+        }
+        
+        if (classify) {
+            Classifier.Category category = getCategory(stackTrace);
+            stack.push(category.title, category.type);
+        }
+        
+        // 优化：反向遍历方法数组
+        for (int i = methods.length - 1; i >= 0; i--) {
+            String methodName = getMethodName(methods[i], types[i]);
+            
+            // 优化：减少重复计算和条件检查
+            if (showLines || showBci) {
+                int location = locations[i];
+                if (showLines && (location >>> 16) != 0) {
+                    methodName += ":" + (location >>> 16);
+                } else if (showBci && (location & 0xffff) != 0) {
+                    methodName += "@" + (location & 0xffff);
+                }
+            }
+            
+            stack.push(methodName, types[i]);
+        }
+        
+        // 优化：减少类型转换和条件判断
+        long classId = event.classId();
+        if (classId != 0) {
+            byte frameType = TYPE_INLINED;
+            if (event instanceof AllocationSample) {
+                AllocationSample allocSample = (AllocationSample) event;
+                if (allocSample.tlabSize == 0) {
+                    frameType = TYPE_KERNEL;
+                }
+            }
+            stack.push(getClassName(classId), frameType);
+        }
+
+        fg.addSample(stack, value);
     }
 
     public void dump(OutputStream out) throws IOException {
@@ -79,12 +110,10 @@ public class JfrToFlame extends JfrConverter {
     }
 
     public static void convert(String input, String output, Arguments args) throws IOException {
-        JfrToFlame converter;
-        try (JfrReader jfr = new JfrReader(input)) {
-            converter = new JfrToFlame(jfr, args);
+        try (JfrReader jfr = new JfrReader(input);
+             FileOutputStream out = new FileOutputStream(output)) {
+            JfrToFlame converter = new JfrToFlame(jfr, args);
             converter.convert();
-        }
-        try (FileOutputStream out = new FileOutputStream(output)) {
             converter.dump(out);
         }
     }
