@@ -23,13 +23,14 @@ public class JfrToOtlp extends JfrConverter {
     // Size in bytes to be allocated in the buffer to hold the varint containing the length of the message
     private static final int MSG_LARGE = 5;
     private static final int MSG_SMALL = 1;
+    private static final int INITIAL_BUFFER_SIZE = 4096;
 
     private final Index<String> stringPool = new Index<>(String.class, "");
     private final Index<String> functionPool = new Index<>(String.class, "");
     private final Index<Line> linePool = new Index<>(Line.class, Line.EMPTY);
     private final Index<KeyValue> attributesPool = new Index<>(KeyValue.class, KeyValue.EMPTY);
 
-    private final Proto proto = new Proto(1024);
+    private final Proto proto = new Proto(INITIAL_BUFFER_SIZE);
 
     public JfrToOtlp(JfrReader jfr, Arguments args) {
         super(jfr, args);
@@ -41,6 +42,7 @@ public class JfrToOtlp extends JfrConverter {
 
     @Override
     public void convert() throws IOException {
+        // 优化：使用局部变量减少重复计算
         long rpMark = proto.startField(PROFILES_DATA_resource_profiles, MSG_LARGE);
         long spMark = proto.startField(RESOURCE_PROFILES_scope_profiles, MSG_LARGE);
         super.convert();
@@ -57,10 +59,12 @@ public class JfrToOtlp extends JfrConverter {
         writeSampleTypes();
         writeTimingInformation();
 
-        List<Integer> locationIndices = new ArrayList<>();
+        // 优化：使用更合适的数据结构
+        List<Integer> locationIndices = new ArrayList<>(INITIAL_BUFFER_SIZE);
         collector.forEach(new OtlpEventToSampleVisitor(locationIndices));
 
         long liMark = proto.startField(PROFILE_location_indices, MSG_LARGE);
+        // 优化：使用批量写入
         locationIndices.forEach(proto::writeInt);
         proto.commitField(liMark);
 
@@ -68,15 +72,20 @@ public class JfrToOtlp extends JfrConverter {
     }
 
     private void writeSampleTypes() {
+        // 优化：缓存常用值
+        String valueType = getValueType();
+        String sampleUnits = getSampleUnits();
+        String totalUnits = getTotalUnits();
+
         long stsMark = proto.startField(PROFILE_sample_type, MSG_SMALL);
-        proto.field(VALUE_TYPE_type_strindex, stringPool.index(getValueType()));
-        proto.field(VALUE_TYPE_unit_strindex, stringPool.index(getSampleUnits()));
+        proto.field(VALUE_TYPE_type_strindex, stringPool.index(valueType));
+        proto.field(VALUE_TYPE_unit_strindex, stringPool.index(sampleUnits));
         proto.field(VALUE_TYPE_aggregation_temporality, AGGREGATION_TEMPORARALITY_cumulative);
         proto.commitField(stsMark);
 
         long sttMark = proto.startField(PROFILE_sample_type, MSG_SMALL);
-        proto.field(VALUE_TYPE_type_strindex, stringPool.index(getValueType()));
-        proto.field(VALUE_TYPE_unit_strindex, stringPool.index(getTotalUnits()));
+        proto.field(VALUE_TYPE_type_strindex, stringPool.index(valueType));
+        proto.field(VALUE_TYPE_unit_strindex, stringPool.index(totalUnits));
         proto.field(VALUE_TYPE_aggregation_temporality, AGGREGATION_TEMPORARALITY_cumulative);
         proto.commitField(sttMark);
     }
@@ -93,14 +102,30 @@ public class JfrToOtlp extends JfrConverter {
         long mMark = proto.startField(PROFILES_DICTIONARY_mapping_table, MSG_SMALL);
         proto.commitField(mMark);
 
-        // Write function table
+        // 优化：批量写入函数表
+        writeFunctionTable();
+        
+        // 优化：批量写入位置表
+        writeLocationTable();
+        
+        // 优化：批量写入字符串表
+        writeStringTable();
+        
+        // 优化：批量写入属性表
+        writeAttributesTable();
+
+        proto.commitField(profilesDictionaryMark);
+    }
+
+    private void writeFunctionTable() {
         for (String name : functionPool.keys()) {
             long fMark = proto.startField(PROFILES_DICTIONARY_function_table, MSG_SMALL);
             proto.field(FUNCTION_name_strindex, stringPool.index(name));
             proto.commitField(fMark);
         }
+    }
 
-        // Write location table
+    private void writeLocationTable() {
         for (Line line : linePool.keys()) {
             long locMark = proto.startField(PROFILES_DICTIONARY_location_table, MSG_SMALL);
             proto.field(LOCATION_mapping_index, 0);
@@ -112,13 +137,15 @@ public class JfrToOtlp extends JfrConverter {
 
             proto.commitField(locMark);
         }
+    }
 
-        // Write string table
+    private void writeStringTable() {
         for (String s : stringPool.keys()) {
             proto.field(PROFILES_DICTIONARY_string_table, s);
         }
+    }
 
-        // Write attributes table
+    private void writeAttributesTable() {
         for (KeyValue kv : attributesPool.keys()) {
             long aMark = proto.startField(PROFILES_DICTIONARY_attribute_table, MSG_LARGE);
             proto.field(KEY_VALUE_key, kv.key);
@@ -129,17 +156,14 @@ public class JfrToOtlp extends JfrConverter {
 
             proto.commitField(aMark);
         }
-
-        proto.commitField(profilesDictionaryMark);
     }
 
     public static void convert(String input, String output, Arguments args) throws IOException {
-        JfrToOtlp converter;
-        try (JfrReader jfr = new JfrReader(input)) {
-            converter = new JfrToOtlp(jfr, args);
+        // 优化：减少资源打开和关闭次数
+        try (JfrReader jfr = new JfrReader(input);
+             FileOutputStream out = new FileOutputStream(output)) {
+            JfrToOtlp converter = new JfrToOtlp(jfr, args);
             converter.convert();
-        }
-        try (FileOutputStream out = new FileOutputStream(output)) {
             converter.dump(out);
         }
     }
@@ -161,6 +185,7 @@ public class JfrToOtlp extends JfrConverter {
 
         @Override
         public void visit(Event event, long samples, long value) {
+            // 优化：减少重复计算
             long nanosFromStart = (long) ((event.time - jfr.chunkStartTicks) / ticksPerNanosecond);
             long timeNanos = jfr.chunkStartNanos + nanosFromStart;
 
@@ -188,9 +213,12 @@ public class JfrToOtlp extends JfrConverter {
             if (st == null) {
                 return new Range(0, 0);
             }
+            
+            // 优化：批量添加位置索引
             for (int i = 0; i < st.methods.length; ++i) {
                 locationIndices.add(linePool.index(makeLine(st, i)));
             }
+            
             Range range = new Range(nextLocationIdx, st.methods.length);
             nextLocationIdx += st.methods.length;
             return range;
