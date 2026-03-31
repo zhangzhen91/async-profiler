@@ -43,52 +43,70 @@ void AllocTracer::trapHandler(int signo, siginfo_t* siginfo, void* ucontext) {
     // Create stack frame from user context to access function arguments
     StackFrame frame(ucontext);
     
-    // Pre-declare variables to reduce branching
-    EventType event_type;
-    uintptr_t total_size;
-    uintptr_t instance_size = 0;
-    uintptr_t klass;
-
     // Determine which allocation trap was triggered based on program counter
     const uintptr_t pc = frame.pc();
-    if (_in_new_tlab.covers(pc)) {
-        // Allocation in new TLAB (Thread Local Allocation Buffer)
-        event_type = ALLOC_SAMPLE;
-        
-        // Extract arguments based on JDK version (branch prediction friendly)
-        if (_trap_kind == 1) {
-            total_size = frame.arg2();     // tlab_size
-            instance_size = frame.arg3();  // alloc_size
-            klass = frame.arg0();          // klass
-        } else {
-            total_size = frame.arg1();     // tlab_size
-            instance_size = frame.arg2();  // alloc_size
-            klass = frame.arg0();          // klass
-        }
-    } else if (_outside_tlab.covers(pc)) {
-        // Allocation outside TLAB
-        event_type = ALLOC_OUTSIDE_TLAB;
-        
-        // Extract allocation size based on JDK version
-        if (_trap_kind == 1) {
-            total_size = frame.arg2();     // alloc_size
-            klass = frame.arg0();          // klass
-        } else {
-            total_size = frame.arg1();     // alloc_size
-            klass = frame.arg0();          // klass
-        }
-    } else {
-        // Not our trap - delegate to profiler's handler
+    
+    // Handle allocation in new TLAB (most common case)
+    if (_in_new_tlab.covers(pc)) [[likely]] {
+        handleNewTlabAllocation(frame, ucontext);
+    } 
+    // Handle allocation outside TLAB
+    else if (_outside_tlab.covers(pc)) [[unlikely]] {
+        handleOutsideTlabAllocation(frame, ucontext);
+    } 
+    // Not our trap - delegate to profiler's handler
+    else [[unlikely]] {
         Profiler::instance()->trapHandler(signo, siginfo, ucontext);
-        return;
     }
+}
 
+/**
+ * Handles allocation in new TLAB (Thread Local Allocation Buffer)
+ * This is the most common allocation path
+ */
+inline void AllocTracer::handleNewTlabAllocation(StackFrame& frame, void* ucontext) {
+    const uintptr_t klass = frame.arg0();
+    uintptr_t total_size, instance_size;
+    
+    // Extract arguments based on JDK version
+    if (_trap_kind == 1) [[likely]] {
+        total_size = frame.arg2();     // tlab_size
+        instance_size = frame.arg3();  // alloc_size
+    } else [[unlikely]] {
+        total_size = frame.arg1();     // tlab_size
+        instance_size = frame.arg2();  // alloc_size
+    }
+    
     // Leave the trapped function by simulating "ret" instruction
     frame.ret();
+    
+    // Check sampling interval before recording
+    if (updateCounter(_allocated_bytes, total_size, _interval)) [[likely]] {
+        recordAllocation(ucontext, ALLOC_SAMPLE, klass, total_size, instance_size);
+    }
+}
 
-    // Check sampling interval before recording (fast path optimization)
-    if (updateCounter(_allocated_bytes, total_size, _interval)) {
-        recordAllocation(ucontext, event_type, klass, total_size, instance_size);
+/**
+ * Handles allocation outside TLAB
+ * This is less common but still important for large objects
+ */
+inline void AllocTracer::handleOutsideTlabAllocation(StackFrame& frame, void* ucontext) {
+    const uintptr_t klass = frame.arg0();
+    uintptr_t total_size;
+    
+    // Extract allocation size based on JDK version
+    if (_trap_kind == 1) [[likely]] {
+        total_size = frame.arg2();     // alloc_size
+    } else [[unlikely]] {
+        total_size = frame.arg1();     // alloc_size
+    }
+    
+    // Leave the trapped function by simulating "ret" instruction
+    frame.ret();
+    
+    // Check sampling interval before recording
+    if (updateCounter(_allocated_bytes, total_size, _interval)) [[likely]] {
+        recordAllocation(ucontext, ALLOC_OUTSIDE_TLAB, klass, total_size, 0);
     }
 }
 
@@ -111,12 +129,12 @@ void AllocTracer::recordAllocation(void* ucontext, EventType event_type, uintptr
     event._instance_size = instance_size;  // Store object instance size
 
     // Fast path: try to resolve class name if VM structures are available
-    if (VMStructs::hasClassNames() && rklass != 0) {
+    if (VMStructs::hasClassNames() && rklass != 0) [[likely]] {
         // Get class name from JVM internal structures
         VMKlass* klass = VMKlass::fromHandle(rklass);
-        if (klass != nullptr) {
+        if (klass != nullptr) [[likely]] {
             VMSymbol* symbol = klass->name();
-            if (symbol != nullptr && symbol->body() != nullptr) {
+            if (symbol != nullptr && symbol->body() != nullptr) [[likely]] {
                 // Look up or create class ID in profiler's class map
                 event._class_id = Profiler::instance()->classMap()->lookup(symbol->body(), symbol->length());
             }
